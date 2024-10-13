@@ -1,4 +1,5 @@
-module github.com/ozonmp/omp-template-api/pkg/omp-template-api
+module github.com/melanjnk/equipment-monitor/pkg/equipment_api
+//module github.com/ozonmp/omp-template-api/pkg/omp-template-api
 
 go 1.17
 
