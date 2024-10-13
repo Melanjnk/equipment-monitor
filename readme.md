@@ -6,3 +6,5 @@ ES + CQRS
 ```dockerfile
 docker-compose up -d
 ```
+
+equipment-api

@@ -12,8 +12,8 @@ version: v1
 #name: buf.build/acme/weather
 
 # deps are the module dependencies
-# deps:
-#   - buf.build/googleapis/googleapis
+deps:
+   - buf.build/googleapis/googleapis
 #   - buf.build/envoyproxy/protoc-gen-validate
 
 # build contains the options for builds.
