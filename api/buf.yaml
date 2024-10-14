@@ -13,7 +13,7 @@ version: v1
 
 # deps are the module dependencies
 deps:
-   - buf.build/googleapis/googleapis
+#   - buf.build/googleapis/googleapis
 #   - buf.build/envoyproxy/protoc-gen-validate
 
 # build contains the options for builds.

@@ -6,6 +6,7 @@ import "validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
+//option g1o_package = "github.com/ozonmp/omp-template-api/pkg/omp-template-api;omp_template_api";
 option go_package = "github.com/melanjnk/equipment-monitor/pkg/equipment_api;equipment-api";
 
 // OmpTemplateApiService - Service for working with templates
