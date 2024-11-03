@@ -22,18 +22,18 @@ func main() {
 	defer db.Close()
 
 	repo := repository.NewEquipment(db)
-	eqController := controller.NewEquipment(
+	cont := controller.NewEquipment(
 		service.NewEquipment(&repo),
 	)
 
 	// Configure router
 	router := corsrouter.CORSRouter{}
 	eqRouter := router.PathPrefix("/equipment").Subrouter()
-	eqRouter.HandleFunc("/", eqController.List).Methods("GET")
-	eqRouter.HandleFunc("/", eqController.Create).Methods("POST")
-	eqRouter.HandleFunc("/{id}", eqController.Update).Methods("PUT")
-	eqRouter.HandleFunc("/{id}", eqController.Get).Methods("GET")
-	eqRouter.HandleFunc("/{id}", eqController.Delete).Methods("DELETE")
+	eqRouter.HandleFunc("/", cont.Create).Methods(http.MethodPost)
+	eqRouter.HandleFunc("/", cont.Update).Methods(http.MethodPut)
+	eqRouter.HandleFunc("/", cont.List).Methods(http.MethodGet)
+	eqRouter.HandleFunc("/{id}", cont.Get).Methods(http.MethodGet)
+	eqRouter.HandleFunc("/{id}", cont.Delete).Methods(http.MethodDelete)
 
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 

@@ -2,15 +2,15 @@ package service
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 )
 
 type EquipmentRepo interface {
-	List() ([]model.Equipment, error)
-	Create(et model.EquipmentType, ep model.Params) (uuid.UUID, error)
-	Update(id uuid.UUID, status *model.OperationalStatus, parameters model.Params) error
-	FindById(Id uuid.UUID) (*model.Equipment, error)
-	RemoveById(Id uuid.UUID) (bool, error)
+	List() ([]*dtos.EquipmentGet, error)
+	Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error)
+	Update(equ *dtos.EquipmentUpdate) (bool, error)
+	FindById(id uuid.UUID) (*dtos.EquipmentGet, error)
+	RemoveById(id uuid.UUID) (bool, error)
 }
 
 type Equipment struct {
@@ -21,31 +21,31 @@ func NewEquipment(repo EquipmentRepo) Equipment {
 	return Equipment{repo: repo}
 }
 
-func (eqs *Equipment) List() ([]model.Equipment, error) {
-	return eqs.repo.List()
+func (service *Equipment) List() ([]*dtos.EquipmentGet, error) {
+	return service.repo.List()
 }
 
-func (eqs *Equipment) Create(eqt model.EquipmentType, eqp model.Params) (uuid.UUID, error) {
-	return eqs.repo.Create(eqt, eqp)
+func (service *Equipment) Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error) {
+	return service.repo.Create(eqc)
 }
 
-func (eqs *Equipment) Update(id uuid.UUID, eqos *model.OperationalStatus, eqp model.Params) error {
-	return eqs.repo.Update(id, eqos, eqp)
+func (service *Equipment) Update(equ *dtos.EquipmentUpdate) (bool, error) {
+	return service.repo.Update(equ)
 }
 
-func (eqs *Equipment) Get(eqId string) (*model.Equipment, error) {
-	id, err := uuid.FromString(eqId)
+func (service *Equipment) Get(ids string) (*dtos.EquipmentGet, error) {
+	id, err := uuid.FromString(ids)
 	if err != nil {
 		return nil, err
 	}
 
-	return eqs.repo.FindById(id)
+	return service.repo.FindById(id)
 }
 
-func (eqs *Equipment) Delete(eqId string) (bool, error) {
+func (service *Equipment) Delete(eqId string) (bool, error) {
 	id, err := uuid.FromString(eqId)
 	if err != nil {
 		return false, err
 	}
-	return eqs.repo.RemoveById(id)
+	return service.repo.RemoveById(id)
 }

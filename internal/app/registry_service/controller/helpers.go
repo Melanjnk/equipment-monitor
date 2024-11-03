@@ -6,18 +6,20 @@ import (
 	"net/http"
 )
 
-const parameterIsRequired string = "Parameter `%s` is required."
+const(
+	parameterIsRequired string = "Parameter `%s` is required."
+	invalidJSONData = "Invalid JSON data: `%v`"
+	unableToFindEquipment = "Unable to find equipment `%v` for %s"
+	equipmentIdError = "%s equipment `%v` error: %v"
+	equipmentActionIsPerformed = "Equipment `%v` is %s"
+)
 
-func writeMessage(w http.ResponseWriter, status int, message string, params ...interface{}) {
-	w.WriteHeader(status)
-	fmt.Fprintf(w, message, params...)
+func writeMessage(writer http.ResponseWriter, status int, message string, parameters ...interface{}) {
+	writer.WriteHeader(status)
+	fmt.Fprintf(writer, message, parameters...)
 }
 
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
-}
-
-func readJSON(r *http.Request, data interface{}) error {
-	return json.NewDecoder(r.Body).Decode(data)
+func writeJSON(writer http.ResponseWriter, status int, data interface{}) {
+	writer.WriteHeader(status)
+	_ = json.NewEncoder(writer).Encode(data)
 }
