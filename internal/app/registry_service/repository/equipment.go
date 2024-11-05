@@ -19,38 +19,37 @@ func NewEquipment(db *sqlx.DB) Equipment {
 	return Equipment{db: db}
 }
 
-func (repo *Equipment) List() ([]*dtos.EquipmentGet, error) {
-	var eqs []model.Equipment
-	err := repo.db.Select(&eqs, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`)
+func (repository *Equipment) List() ([]*dtos.EquipmentGet, error) {
+	var equipmentModels []model.Equipment
+	err := repository.db.Select(&equipmentModels, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`)
 	if err != nil {
 		return nil, err
 	}
-	count := len(eqs)
-	eqgs := make([]*dtos.EquipmentGet, count, count)
-	for i, eq := range eqs {
-		eqgs[i] = dtos.EquipmentGetFromModel(eq)
+	equipmentGets := make([]*dtos.EquipmentGet, 0, len(equipmentModels))
+	for _, equipmentModel := range equipmentModels {
+		equipmentGets = append(equipmentGets, dtos.EquipmentGetFromModel(equipmentModel))
 	}
-	return eqgs, nil
+	return equipmentGets, nil
 }
 
-func (repo *Equipment) Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error) {
-	for jParameters, _ := json.Marshal(eqc.Parameters); ; {
+func (repository *Equipment) Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error) {
+	for jsonifiedParameters, _ := json.Marshal(equipmentCreate.Parameters); ; {
 		// Generate a UUID version 6 (using a library):
 		id, err := uuid.NewV6()
 		if err == nil {
-			_, err = repo.db.NamedExec(
+			_, err = repository.db.NamedExec(
 				`INSERT INTO equipment (id, kind, status, parameters) VALUES (:id, :kind, :status, :parameters)`,
 				map[string]interface{}{
 					"id":         id,
-					"kind":       eqc.Kind,
+					"kind":       equipmentCreate.Kind,
 					"status":     model.Operational,
-					"parameters": jParameters,
+					"parameters": jsonifiedParameters,
 				},
 			)
 			if err == nil {
 				return id, nil
 			}
-			if false {// TODO: Check id duplicate error
+			if false {// TODO: Check id collision error
 				continue
 			}
 		}
@@ -58,48 +57,48 @@ func (repo *Equipment) Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error) {
 	}
 }
 
-func (repo *Equipment) Update(equ *dtos.EquipmentUpdate) (bool, error) {
+func (repository *Equipment) Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error) {
 	var set string
-	var parameters []byte
-	if equ.Parameters == nil {
-		if equ.Status == nil {
+	var jsonifiedParameters []byte
+	if equipmentUpdate.Parameters == nil {
+		if equipmentUpdate.Status == nil {
 			return false, nil // Nothing to update
 		}
 		set = "status=:status"
 	} else {
-		if equ.Status == nil {
+		if equipmentUpdate.Status == nil {
 			set = "parameters=:parameters, updated_at=:updated_at"
 		} else {
 			set = "status=:status, parameters=:parameters, updated_at=:updated_at"
 		}
-		parameters, _ = json.Marshal(*equ.Parameters)
+		jsonifiedParameters, _ = json.Marshal(*equipmentUpdate.Parameters)
 	}
-	return checkAffect(repo.db.NamedExec(
+	return checkAffect(repository.db.NamedExec(
 		fmt.Sprintf("UPDATE equipment SET %s WHERE id=:id", set),
 		map[string]interface{}{
-			"id":			equ.Id,
-			"status": 		equ.Status,
-			"parameters":	parameters,
+			"id":			equipmentUpdate.Id,
+			"status": 		equipmentUpdate.Status,
+			"parameters":	jsonifiedParameters,
 			"updated_at":	time.Now(),
 		},
 	))
 }
 
-func (repo *Equipment) FindById(id uuid.UUID) (*dtos.EquipmentGet, error) {
-	var eq model.Equipment
-	err := repo.db.Get(&eq, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment WHERE id=$1`, id)
+func (repository *Equipment) FindById(id uuid.UUID) (*dtos.EquipmentGet, error) {
+	var equipmentModel model.Equipment
+	err := repository.db.Get(&equipmentModel, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment WHERE id=$1`, id)
 	if err != nil {
 		return nil, err
 	}
 	var parameters map[string]interface{}
-	if err := json.Unmarshal(eq.Parameters, &parameters); err != nil {
+	if err := json.Unmarshal(equipmentModel.Parameters, &parameters); err != nil {
 		return nil, err
 	}
-	return dtos.EquipmentGetFromModel(eq), nil
+	return dtos.EquipmentGetFromModel(equipmentModel), nil
 }
 
-func (repo *Equipment) RemoveById(id uuid.UUID) (bool, error) {
-	return checkAffect(repo.db.Exec(`DELETE FROM equipment WHERE id=$1`, id))
+func (repository *Equipment) RemoveById(id uuid.UUID) (bool, error) {
+	return checkAffect(repository.db.Exec(`DELETE FROM equipment WHERE id=$1`, id))
 }
 
 func checkAffect(result sql.Result, err error) (bool, error) {

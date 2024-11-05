@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 	"github.com/gofrs/uuid"
@@ -56,10 +55,9 @@ type EquipmentUpdate struct {
 	Parameters	*map[string]interface{}		`json:"parameters"`
 }
 
-func (equ EquipmentUpdate) Validate() error {
-	log.Println(equ.Status)
-	if equ.Status != nil && !equ.Status.IsValid() {
-		return fmt.Errorf("Invalid Equipment.Status: %d", *equ.Status)
+func (equipmentUpdate EquipmentUpdate) Validate() error {
+	if equipmentUpdate.Status != nil && !equipmentUpdate.Status.IsValid() {
+		return fmt.Errorf("Invalid Equipment.Status: %d", *equipmentUpdate.Status)
 	}
 	// TODO: check non-empty Parameters
 	return nil
@@ -75,15 +73,15 @@ type EquipmentGet struct {
 	UpdatedAt	time.Time				`json:"updated_at"`
 }
 
-func EquipmentGetFromModel(model model.Equipment) *EquipmentGet {
+func EquipmentGetFromModel(equipmentModel model.Equipment) *EquipmentGet {
 	var parameters map[string]interface{}
-	_ = json.Unmarshal(model.Parameters, &parameters)
+	_ = json.Unmarshal(equipmentModel.Parameters, &parameters)
 	return &EquipmentGet {
-		Id:			model.Id,
-		Kind:		model.Kind,
-		Status:		model.Status,
+		Id:			equipmentModel.Id,
+		Kind:		equipmentModel.Kind,
+		Status:		equipmentModel.Status,
 		Parameters:	parameters,
-		CreatedAt:	model.CreatedAt,
-		UpdatedAt:	model.UpdatedAt,
+		CreatedAt:	equipmentModel.CreatedAt,
+		UpdatedAt:	equipmentModel.UpdatedAt,
 	}
 }

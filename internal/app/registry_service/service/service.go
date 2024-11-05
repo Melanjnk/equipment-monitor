@@ -1,51 +1,53 @@
 package service
 
 import (
+	"fmt"
 	"github.com/gofrs/uuid"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 )
 
-type EquipmentRepo interface {
+const failedToParseUUID string = "%s: failed to parse `%s` as UUID: %v"
+
+type EquipmentRepository interface {
 	List() ([]*dtos.EquipmentGet, error)
-	Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error)
-	Update(equ *dtos.EquipmentUpdate) (bool, error)
+	Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error)
+	Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error)
 	FindById(id uuid.UUID) (*dtos.EquipmentGet, error)
 	RemoveById(id uuid.UUID) (bool, error)
 }
 
 type Equipment struct {
-	repo EquipmentRepo
+	repository EquipmentRepository
 }
 
-func NewEquipment(repo EquipmentRepo) Equipment {
-	return Equipment{repo: repo}
+func NewEquipment(repository EquipmentRepository) Equipment {
+	return Equipment{repository: repository}
 }
 
 func (service *Equipment) List() ([]*dtos.EquipmentGet, error) {
-	return service.repo.List()
+	return service.repository.List()
 }
 
-func (service *Equipment) Create(eqc *dtos.EquipmentCreate) (uuid.UUID, error) {
-	return service.repo.Create(eqc)
+func (service *Equipment) Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error) {
+	return service.repository.Create(equipmentCreate)
 }
 
-func (service *Equipment) Update(equ *dtos.EquipmentUpdate) (bool, error) {
-	return service.repo.Update(equ)
+func (service *Equipment) Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error) {
+	return service.repository.Update(equipmentUpdate)
 }
 
-func (service *Equipment) Get(ids string) (*dtos.EquipmentGet, error) {
-	id, err := uuid.FromString(ids)
+func (service *Equipment) Get(equipmentId string) (*dtos.EquipmentGet, error) {
+	id, err := uuid.FromString(equipmentId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(failedToParseUUID, "Get", equipmentId, err)
 	}
-
-	return service.repo.FindById(id)
+	return service.repository.FindById(id)
 }
 
-func (service *Equipment) Delete(eqId string) (bool, error) {
-	id, err := uuid.FromString(eqId)
+func (service *Equipment) Delete(equipmentId string) (bool, error) {
+	id, err := uuid.FromString(equipmentId)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf(failedToParseUUID, "Delete", equipmentId, err)
 	}
-	return service.repo.RemoveById(id)
+	return service.repository.RemoveById(id)
 }
