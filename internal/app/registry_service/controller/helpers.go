@@ -9,9 +9,9 @@ import (
 const(
 	parameterIsRequired string = "Parameter `%s` is required."
 	invalidJSONData = "Invalid JSON data: `%v`"
-	unableToFindEquipment = "Unable to find equipment `%v` for %s"
-	equipmentIdError = "%s equipment `%v` error: %v"
-	equipmentActionIsPerformed = "Equipment `%v` is %s"
+	unableToFindEquipment = "Unable to find equipment #%v for %s"
+	equipmentIdError = "%s equipment #%v error: %v"
+	equipmentActionIsPerformed = "Equipment #%v is %s"
 )
 
 func writeMessage(writer http.ResponseWriter, status int, message string, parameters ...interface{}) {

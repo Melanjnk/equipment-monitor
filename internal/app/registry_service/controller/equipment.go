@@ -16,7 +16,6 @@ func NewEquipment(service service.Equipment) Equipment {
 }
 
 func (controller *Equipment) List(writer http.ResponseWriter, request *http.Request) {
-	// TODO: Filter
 	equipmentList, err := controller.service.List()
 	if err != nil {
 		writeMessage(writer, http.StatusInternalServerError, "List error: %v", err)
