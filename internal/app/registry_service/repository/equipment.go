@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 	"github.com/gofrs/uuid"
 	"github.com/jmoiron/sqlx"
@@ -19,9 +19,65 @@ func NewEquipment(db *sqlx.DB) Equipment {
 	return Equipment{db: db}
 }
 
-func (repository *Equipment) List() ([]*dtos.EquipmentGet, error) {
+func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error) {
 	var equipmentModels []model.Equipment
-	err := repository.db.Select(&equipmentModels, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`)
+	query := `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`
+	conditions := make([]string, 0, 6)
+	if equipmentFilter.Kinds != nil {
+		switch len(equipmentFilter.Kinds) {
+			case 0:
+				break
+			case 1:
+				conditions = append(conditions, "kind=" + string(figure(equipmentFilter.Kinds[0])))
+			default:
+				conditions = append(conditions, fmt.Sprintf("kind IN (%s)", joinIntegralArray(equipmentFilter.Kinds)))
+		}
+	}
+	if equipmentFilter.Statuses != nil {
+		switch len(equipmentFilter.Statuses) {
+			case 0:
+				break
+			case 1:
+				conditions = append(conditions, "status=" + string(figure(equipmentFilter.Statuses[0])))
+			default:
+				conditions = append(conditions, fmt.Sprintf("status IN (%s)", joinIntegralArray(equipmentFilter.Statuses)))
+		}
+	}
+	if equipmentFilter.CreatedAt != nil {
+		conditions = append(conditions, "created_at=:created_at")
+	}
+	if equipmentFilter.CreatedSince != nil {
+		conditions = append(conditions, "created_at>=:created_since")
+	}
+	if equipmentFilter.CreatedBefore != nil {
+		conditions = append(conditions, "created_at<:created_before")
+	}
+	if equipmentFilter.UpdatedAt != nil {
+		conditions = append(conditions, "updated_at=:updated_at")
+	}
+	if equipmentFilter.UpdatedSince != nil {
+		conditions = append(conditions, "updated_at>=:updated_since")
+	}
+	if equipmentFilter.UpdatedBefore != nil {
+		conditions = append(conditions, "updated_at<:updated_before")
+	}
+	var err error
+	if len(conditions) == 0 {
+		err = repository.db.Select(&equipmentModels, query)
+	} else {
+		preparedQuery, _ := repository.db.PrepareNamed(query + " WHERE " + strings.Join(conditions, " AND "))
+		err = preparedQuery.Select(
+			&equipmentModels,
+			map[string]interface{}{
+				"created_at": equipmentFilter.CreatedAt,
+				"created_since": equipmentFilter.CreatedSince,
+				"created_before": equipmentFilter.CreatedBefore,
+				"updated_at": equipmentFilter.UpdatedAt,
+				"updated_since": equipmentFilter.UpdatedSince,
+				"updated_before": equipmentFilter.UpdatedBefore,
+			},
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -67,14 +123,14 @@ func (repository *Equipment) Update(equipmentUpdate *dtos.EquipmentUpdate) (bool
 		set = "status=:status"
 	} else {
 		if equipmentUpdate.Status == nil {
-			set = "parameters=:parameters, updated_at=:updated_at"
+			set = "parameters=:parameters"
 		} else {
-			set = "status=:status, parameters=:parameters, updated_at=:updated_at"
+			set = "status=:status, parameters=:parameters"
 		}
 		jsonifiedParameters, _ = json.Marshal(*equipmentUpdate.Parameters)
 	}
 	return checkAffect(repository.db.NamedExec(
-		fmt.Sprintf("UPDATE equipment SET %s WHERE id=:id", set),
+		fmt.Sprintf("UPDATE equipment SET %s, updated_at=:updated_at WHERE id=:id", set),
 		map[string]interface{}{
 			"id":			equipmentUpdate.Id,
 			"status": 		equipmentUpdate.Status,
@@ -99,14 +155,4 @@ func (repository *Equipment) FindById(id uuid.UUID) (*dtos.EquipmentGet, error) 
 
 func (repository *Equipment) RemoveById(id uuid.UUID) (bool, error) {
 	return checkAffect(repository.db.Exec(`DELETE FROM equipment WHERE id=$1`, id))
-}
-
-func checkAffect(result sql.Result, err error) (bool, error) {
-	if err == nil {
-		var count int64
-		if count, err = result.RowsAffected(); err == nil {
-			return count > 0, nil
-		}
-	}
-	return false, err
 }

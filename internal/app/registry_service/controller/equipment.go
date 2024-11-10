@@ -16,8 +16,9 @@ func NewEquipment(service service.Equipment) Equipment {
 }
 
 func (controller *Equipment) List(writer http.ResponseWriter, request *http.Request) {
-	equipmentList, err := controller.service.List()
-	if err != nil {
+	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
+		writeMessage(writer, http.StatusBadRequest, "Invalid GET parameters: %v", err)
+	} else if equipmentList, err := controller.service.List(equipmentFilter); err != nil {
 		writeMessage(writer, http.StatusInternalServerError, "List error: %v", err)
 	} else {
 		writeJSON(writer, http.StatusOK, equipmentList)

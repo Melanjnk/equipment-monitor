@@ -9,7 +9,7 @@ import (
 const failedToParseUUID string = "%s: failed to parse `%s` as UUID: %v"
 
 type EquipmentRepository interface {
-	List() ([]*dtos.EquipmentGet, error)
+	List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error)
 	Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error)
 	Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error)
 	FindById(id uuid.UUID) (*dtos.EquipmentGet, error)
@@ -24,8 +24,8 @@ func NewEquipment(repository EquipmentRepository) Equipment {
 	return Equipment{repository: repository}
 }
 
-func (service *Equipment) List() ([]*dtos.EquipmentGet, error) {
-	return service.repository.List()
+func (service *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error) {
+	return service.repository.List(equipmentFilter)
 }
 
 func (service *Equipment) Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error) {
