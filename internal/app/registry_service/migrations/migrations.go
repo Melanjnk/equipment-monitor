@@ -13,7 +13,7 @@ func CreateTableEquipment(db *sqlx.DB) error {
 			status SMALLINT NOT NULL CHECK(status BETWEEN 0 AND 2),
 			parameters JSONB NOT NULL,
 			created_at TIMESTAMP NOT NULL DEFAULT current_timestamp,
-			updated_at TIMESTAMP NOT NULL DEFAULT current_timestamp
+			updated_at TIMESTAMP NOT NULL DEFAULT current_timestamp CHECK (updated_at >= created_at)
 		);
 	`)
 	return err

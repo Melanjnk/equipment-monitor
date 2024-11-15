@@ -14,7 +14,10 @@ import (
 const (
 	emptyParameters string = "Equipment parameters should not be empty"
 	invalidFieldValue = "Invalid equipment %s value: %d"
-	eitherAtOrSinceBefore = "Either `%[1]s_at` or `%[1]s_since`/`%[1]s_before` must me used"
+	/*eitherAtOrSinceAfterBeforeUntil = "Either `%[1]s_at` or `%[1]s_since`/`%[1]s_after`/`%[1]s_before/`%[1]s_until` can be used"
+	eitherSinceOrAfter = "Either `%[1]s_since` or `%[1]s_after` can be used"
+	eitherBeforeOrUntil = "Either `%[1]s_before` or `%[1]s_until` can be used"*/
+	cannotBeUsedTogether = "Fields `%s` and `%s` cannot be used together"
 	mustPrecede = "%s must precede %s"
 )
 
@@ -95,13 +98,13 @@ func EquipmentGetFromModel(equipmentModel model.Equipment) *EquipmentGet {
 
 type EquipmentFilter struct {
 	Kinds			[]model.EquipmentKind		`schema:"kind"`
+	NoKinds			[]model.EquipmentKind		`schema:"no_kind"`
 	Statuses		[]model.OperationalStatus	`schema:"status"`
-	CreatedAt		*time.Time					`schema:"created_at"`
+	NoStatuses		[]model.OperationalStatus	`schema:"no_status"`
 	CreatedSince	*time.Time					`schema:"created_since"`
-	CreatedBefore	*time.Time					`schema:"created_before"`
-	UpdatedAt		*time.Time					`schema:"updated_at"`
+	CreatedUntil	*time.Time					`schema:"created_until"`
 	UpdatedSince	*time.Time					`schema:"updated_since"`
-	UpdatedBefore	*time.Time					`schema:"updated_before"`
+	UpdatedUntil	*time.Time					`schema:"updated_until"`
 }
 
 // precedesOthers returns true if time0 is before or equal to any other non-nil time from params;
@@ -117,49 +120,49 @@ func precedesOthers(time0 time.Time, times ...*time.Time) bool {
 
 func (equipmentFilter *EquipmentFilter) Validate() error {
 	if equipmentFilter.Kinds != nil {
+		if equipmentFilter.NoKinds != nil {
+			return fmt.Errorf(cannotBeUsedTogether, "kind", "no_kind")
+		}
 		for _, kind := range equipmentFilter.Kinds {
 			if !kind.IsValid() {
 				return fmt.Errorf(invalidFieldValue, "kind", kind)
 			}
 		}
+	} else if equipmentFilter.Kinds != nil {
+		for _, kind := range equipmentFilter.NoKinds {
+			if !kind.IsValid() {
+				return fmt.Errorf(invalidFieldValue, "no_kind", kind)
+			}
+		}
 	}
+	
 	if equipmentFilter.Statuses != nil {
-		for _, status := range equipmentFilter.Kinds {
+		if equipmentFilter.NoStatuses != nil {
+			return fmt.Errorf(cannotBeUsedTogether, "status", "no_status")
+		}
+		for _, status := range equipmentFilter.Statuses {
 			if !status.IsValid() {
 				return fmt.Errorf(invalidFieldValue, "status", status)
 			}
 		}
-	}
-	if equipmentFilter.CreatedAt != nil {
-		if equipmentFilter.CreatedSince != nil || equipmentFilter.CreatedBefore != nil {
-			return fmt.Errorf(eitherAtOrSinceBefore, "created")
-		}
-		if !precedesOthers(*equipmentFilter.CreatedAt,
-			equipmentFilter.UpdatedAt, equipmentFilter.UpdatedSince, equipmentFilter.UpdatedBefore,
-		) {
-			return fmt.Errorf(mustPrecede, "`created_at`", "`updated_at`/`updated_since`/`updated_before`")
-		}
-	} else if equipmentFilter.CreatedSince != nil {
-		if !precedesOthers(*equipmentFilter.CreatedSince,
-			equipmentFilter.CreatedBefore, equipmentFilter.UpdatedAt, equipmentFilter.UpdatedSince, equipmentFilter.UpdatedBefore,
-		) {
-			return fmt.Errorf(mustPrecede, "`created_since`", "`created_before`/`updated_at`/`updated_since`/`updated_before`")
-		}
-	} else if equipmentFilter.CreatedBefore != nil {
-		if !precedesOthers(*equipmentFilter.CreatedBefore,
-			equipmentFilter.UpdatedAt, equipmentFilter.UpdatedSince, equipmentFilter.UpdatedBefore,
-		) {
-			return fmt.Errorf(mustPrecede, "`created_before`", "`updated_at`/`updated_since`/`updated_before`")
+	} else if equipmentFilter.NoStatuses != nil {
+		for _, status := range equipmentFilter.NoStatuses {
+			if !status.IsValid() {
+				return fmt.Errorf(invalidFieldValue, "no_status", status)
+			}
 		}
 	}
-	if equipmentFilter.UpdatedAt != nil {
-		if equipmentFilter.UpdatedSince != nil || equipmentFilter.UpdatedBefore != nil {
-			return fmt.Errorf(eitherAtOrSinceBefore, "updated")
+
+	if equipmentFilter.CreatedSince != nil {
+		if equipmentFilter.CreatedUntil != nil && equipmentFilter.CreatedSince.After(*equipmentFilter.CreatedUntil) {
+			return fmt.Errorf(mustPrecede, "`created_since`", "`created_until`")
 		}
-	} else if equipmentFilter.UpdatedSince != nil {
-		if !precedesOthers(*equipmentFilter.UpdatedSince, equipmentFilter.UpdatedBefore) {
-			return fmt.Errorf(mustPrecede, "`updated_since`", "`updated_before`")
+		if equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedSince.Before(*equipmentFilter.CreatedSince) {
+			return fmt.Errorf(mustPrecede, "`created_since`", "`updated_since`")
 		}
+	}
+	if equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedUntil != nil && equipmentFilter.UpdatedUntil.Before(*equipmentFilter.UpdatedSince) {
+		return fmt.Errorf(mustPrecede, "`updated_since`", "`updated_until`")
 	}
 	return nil
 }

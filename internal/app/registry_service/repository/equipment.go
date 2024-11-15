@@ -23,6 +23,7 @@ func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dto
 	var equipmentModels []model.Equipment
 	query := `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`
 	conditions := make([]string, 0, 6)
+
 	if equipmentFilter.Kinds != nil {
 		switch len(equipmentFilter.Kinds) {
 			case 0:
@@ -32,7 +33,17 @@ func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dto
 			default:
 				conditions = append(conditions, fmt.Sprintf("kind IN (%s)", joinIntegralArray(equipmentFilter.Kinds)))
 		}
+	} else if equipmentFilter.NoKinds != nil {
+		switch len(equipmentFilter.NoKinds) {
+			case 0:
+				break
+			case 1:
+				conditions = append(conditions, "kind<>" + string(figure(equipmentFilter.NoKinds[0])))
+			default:
+				conditions = append(conditions, fmt.Sprintf("kind NOT IN (%s)", joinIntegralArray(equipmentFilter.NoKinds)))
+		}
 	}
+
 	if equipmentFilter.Statuses != nil {
 		switch len(equipmentFilter.Statuses) {
 			case 0:
@@ -42,24 +53,28 @@ func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dto
 			default:
 				conditions = append(conditions, fmt.Sprintf("status IN (%s)", joinIntegralArray(equipmentFilter.Statuses)))
 		}
+	} else if equipmentFilter.NoStatuses != nil {
+		switch len(equipmentFilter.NoStatuses) {
+			case 0:
+				break
+			case 1:
+				conditions = append(conditions, "status<>" + string(figure(equipmentFilter.NoStatuses[0])))
+			default:
+				conditions = append(conditions, fmt.Sprintf("status NOT IN (%s)", joinIntegralArray(equipmentFilter.NoStatuses)))
+		}
 	}
-	if equipmentFilter.CreatedAt != nil {
-		conditions = append(conditions, "created_at=:created_at")
-	}
+
 	if equipmentFilter.CreatedSince != nil {
 		conditions = append(conditions, "created_at>=:created_since")
 	}
-	if equipmentFilter.CreatedBefore != nil {
-		conditions = append(conditions, "created_at<:created_before")
-	}
-	if equipmentFilter.UpdatedAt != nil {
-		conditions = append(conditions, "updated_at=:updated_at")
+	if equipmentFilter.CreatedUntil != nil {
+		conditions = append(conditions, "created_at<=:created_until")
 	}
 	if equipmentFilter.UpdatedSince != nil {
 		conditions = append(conditions, "updated_at>=:updated_since")
 	}
-	if equipmentFilter.UpdatedBefore != nil {
-		conditions = append(conditions, "updated_at<:updated_before")
+	if equipmentFilter.UpdatedUntil != nil {
+		conditions = append(conditions, "updated_at<=:updated_until")
 	}
 	var err error
 	if len(conditions) == 0 {
@@ -69,12 +84,10 @@ func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dto
 		err = preparedQuery.Select(
 			&equipmentModels,
 			map[string]interface{}{
-				"created_at": equipmentFilter.CreatedAt,
-				"created_since": equipmentFilter.CreatedSince,
-				"created_before": equipmentFilter.CreatedBefore,
-				"updated_at": equipmentFilter.UpdatedAt,
-				"updated_since": equipmentFilter.UpdatedSince,
-				"updated_before": equipmentFilter.UpdatedBefore,
+				"created_since":	equipmentFilter.CreatedSince,
+				"created_until":	equipmentFilter.CreatedUntil,
+				"updated_since":	equipmentFilter.UpdatedSince,
+				"updated_until":	equipmentFilter.UpdatedUntil,
 			},
 		)
 	}
