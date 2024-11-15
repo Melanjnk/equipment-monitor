@@ -30,7 +30,7 @@ func main() {
 	router := corsrouter.CORSRouter{}
 	equipmentRouter := router.PathPrefix("/equipment").Subrouter()
 	equipmentRouter.HandleFunc("/", equipmentController.Create).Methods(http.MethodPost)
-	equipmentRouter.HandleFunc("/", equipmentController.Update).Methods(http.MethodPut)
+	equipmentRouter.HandleFunc("/", equipmentController.Update).Methods(http.MethodPatch)
 	equipmentRouter.HandleFunc("/", equipmentController.List).Methods(http.MethodGet)
 	equipmentRouter.HandleFunc("/{id}", equipmentController.Get).Methods(http.MethodGet)
 	equipmentRouter.HandleFunc("/{id}", equipmentController.Delete).Methods(http.MethodDelete)
