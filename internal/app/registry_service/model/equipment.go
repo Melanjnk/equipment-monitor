@@ -6,16 +6,20 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-type EquipmentType int16
+type EquipmentKind int16
 const (
-	CNCMachine EquipmentType = iota
+	CNCMachine EquipmentKind = iota
 	ConveyorBelt
 	DrillMachine
 	RoboticArm
 )
 
-func (et EquipmentType) String() string {
-	switch et {
+func (kind EquipmentKind) IsValid() bool {
+	return kind >= CNCMachine && kind <= RoboticArm
+}
+
+func (kind EquipmentKind) String() string {
+	switch kind {
 		case CNCMachine:	return "CNCMachine"
 		case ConveyorBelt:	return "ConveyorBelt"
 		case DrillMachine:	return "DrillMachine"
@@ -24,17 +28,19 @@ func (et EquipmentType) String() string {
 	return "";
 } 
 
-func ParseEquipmentType(s string) *EquipmentType {
-	var result EquipmentType
-	switch strings.ToLower(s) {
-		case "cncmachine":		result = CNCMachine
-		case "conveyorbelt":	result = ConveyorBelt
-		case "drillmachine":	result = DrillMachine
-		case "roboticarm":		result = RoboticArm
+
+func ParseEquipmentKind(str string) *EquipmentKind {
+	var kind EquipmentKind
+	switch strings.ToLower(str) {
+		case "cncmachine":		kind = CNCMachine
+		case "conveyorbelt":	kind = ConveyorBelt
+		case "drillmachine":	kind = DrillMachine
+		case "roboticarm":		kind = RoboticArm
 		default:				return nil
 	}
-	return &result
+	return &kind
 }
+
 
 type OperationalStatus int8
 const (
@@ -43,8 +49,12 @@ const (
 	Decommissioned
 )
 
-func (os OperationalStatus) String() string {
-	switch os {
+func (status OperationalStatus) IsValid() bool {
+	return status >= Operational && status <= Decommissioned
+}
+
+func (status OperationalStatus) String() string {
+	switch status {
 		case Operational:		return "Operational"
 		case UnderMaintenance:	return "UnderMaintenance"
 		case Decommissioned:	return "Decommissioned"
@@ -52,32 +62,31 @@ func (os OperationalStatus) String() string {
 	return ""
 }
 
-func ParseOperationalStatus(s string) *OperationalStatus {
-	var result OperationalStatus
-	switch strings.ToLower(s) {
-		case "operational":			result = Operational
-		case "undermaintenance":	result = UnderMaintenance
-		case "decommissioned":		result = Decommissioned
+func ParseOperationalStatus(str string) *OperationalStatus {
+	var status OperationalStatus
+	switch strings.ToLower(str) {
+		case "operational":			status = Operational
+		case "undermaintenance":	status = UnderMaintenance
+		case "decommissioned":		status = Decommissioned
 		default:					return nil
 	}
-	return &result
+	return &status
 }
 
-type Params map[string]interface{}
 
 type Equipment struct {
 	Id			uuid.UUID			`db:"id,pk"								json:"equipment_id"`
-	Type		EquipmentType		`db:"type,not null"						json:"type"`
-	Status		OperationalStatus	`db:"status,not null"					json:"status"`
-	Parameters	Params				`db:"parameters,not null,type:jsonb"	json:"parameters"`
+	Kind		EquipmentKind		`db:"kind,not null,type:smallserial"	json:"kind"`
+	Status		OperationalStatus	`db:"status,not null,type:smallserial"	json:"status"`
+	Parameters	[]byte				`db:"parameters,not null,type:jsonb"	json:"parameters"`
 	CreatedAt	time.Time			`db:"created_at,not null"				json:"created_at"`
 	UpdatedAt	time.Time			`db:"updated_at,not null"				json:"updated_at"`
 }
 
-func NewEquipment(t EquipmentType, p Params) Equipment {
+func NewEquipment(kind EquipmentKind, parameters []byte) Equipment {
 	return Equipment {
-		Type:		t,
+		Kind:		kind,
 		Status:		Operational,	// Default status on creation
-		Parameters:	p,
+		Parameters:	parameters,
 	}
 }

@@ -21,19 +21,19 @@ func main() {
 	}
 	defer db.Close()
 
-	repo := repository.NewEquipment(db)
-	eqController := controller.NewEquipment(
-		service.NewEquipment(&repo),
+	equipmentRepository := repository.NewEquipment(db)
+	equipmentController := controller.NewEquipment(
+		service.NewEquipment(&equipmentRepository),
 	)
 
 	// Configure router
 	router := corsrouter.CORSRouter{}
-	eqRouter := router.PathPrefix("/equipment").Subrouter()
-	eqRouter.HandleFunc("/", eqController.List).Methods("GET")
-	eqRouter.HandleFunc("/", eqController.Create).Methods("POST")
-	eqRouter.HandleFunc("/{id}", eqController.Update).Methods("PUT")
-	eqRouter.HandleFunc("/{id}", eqController.Get).Methods("GET")
-	eqRouter.HandleFunc("/{id}", eqController.Delete).Methods("DELETE")
+	equipmentRouter := router.PathPrefix("/equipment").Subrouter()
+	equipmentRouter.HandleFunc("/", equipmentController.Create).Methods(http.MethodPost)
+	equipmentRouter.HandleFunc("/", equipmentController.Update).Methods(http.MethodPatch)
+	equipmentRouter.HandleFunc("/", equipmentController.List).Methods(http.MethodGet)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.Get).Methods(http.MethodGet)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.Delete).Methods(http.MethodDelete)
 
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 

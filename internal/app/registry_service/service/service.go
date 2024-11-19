@@ -1,51 +1,53 @@
 package service
 
 import (
+	"fmt"
 	"github.com/gofrs/uuid"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 )
 
-type EquipmentRepo interface {
-	List() ([]model.Equipment, error)
-	Create(et model.EquipmentType, ep model.Params) (uuid.UUID, error)
-	Update(id uuid.UUID, status *model.OperationalStatus, parameters model.Params) error
-	FindById(Id uuid.UUID) (*model.Equipment, error)
-	RemoveById(Id uuid.UUID) (bool, error)
+const failedToParseUUID string = "%s: failed to parse `%s` as UUID: %v"
+
+type EquipmentRepository interface {
+	List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error)
+	Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error)
+	Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error)
+	FindById(id uuid.UUID) (*dtos.EquipmentGet, error)
+	RemoveById(id uuid.UUID) (bool, error)
 }
 
 type Equipment struct {
-	repo EquipmentRepo
+	repository EquipmentRepository
 }
 
-func NewEquipment(repo EquipmentRepo) Equipment {
-	return Equipment{repo: repo}
+func NewEquipment(repository EquipmentRepository) Equipment {
+	return Equipment{repository: repository}
 }
 
-func (eqs *Equipment) List() ([]model.Equipment, error) {
-	return eqs.repo.List()
+func (service *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error) {
+	return service.repository.List(equipmentFilter)
 }
 
-func (eqs *Equipment) Create(eqt model.EquipmentType, eqp model.Params) (uuid.UUID, error) {
-	return eqs.repo.Create(eqt, eqp)
+func (service *Equipment) Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error) {
+	return service.repository.Create(equipmentCreate)
 }
 
-func (eqs *Equipment) Update(id uuid.UUID, eqos *model.OperationalStatus, eqp model.Params) error {
-	return eqs.repo.Update(id, eqos, eqp)
+func (service *Equipment) Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error) {
+	return service.repository.Update(equipmentUpdate)
 }
 
-func (eqs *Equipment) Get(eqId string) (*model.Equipment, error) {
-	id, err := uuid.FromString(eqId)
+func (service *Equipment) Get(equipmentId string) (*dtos.EquipmentGet, error) {
+	id, err := uuid.FromString(equipmentId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(failedToParseUUID, "Get", equipmentId, err)
 	}
-
-	return eqs.repo.FindById(id)
+	return service.repository.FindById(id)
 }
 
-func (eqs *Equipment) Delete(eqId string) (bool, error) {
-	id, err := uuid.FromString(eqId)
+func (service *Equipment) Delete(equipmentId string) (bool, error) {
+	id, err := uuid.FromString(equipmentId)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf(failedToParseUUID, "Delete", equipmentId, err)
 	}
-	return eqs.repo.RemoveById(id)
+	return service.repository.RemoveById(id)
 }
