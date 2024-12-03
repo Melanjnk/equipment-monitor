@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"github.com/jmoiron/sqlx"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/database"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/migrations"
 )
@@ -15,12 +16,15 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
-	if err := migrations.DropTableEquipment(db); err != nil {
-		log.Fatalln(err)
-		panic(err)
-	}
-	if err := migrations.CreateTableEquipment(db); err != nil {
-		log.Fatalln(err)
-		panic(err)
+	for _, function := range []func(*sqlx.DB) error {
+		migrations.DropTableEquipment,
+		migrations.CreateGeneratorUUIDv6,
+		migrations.CreateAutoUpdate,
+		migrations.CreateTableEquipment,
+	} {
+		if err := function(db); err != nil {
+			log.Fatalln(err)
+			panic(err)
+		}
 	}
 }

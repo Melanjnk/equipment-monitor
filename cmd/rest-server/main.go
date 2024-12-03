@@ -23,17 +23,19 @@ func main() {
 
 	equipmentRepository := repository.NewEquipment(db)
 	equipmentController := controller.NewEquipment(
-		service.NewEquipment(&equipmentRepository),
+		service.NewEquipment(equipmentRepository),
 	)
 
 	// Configure router
 	router := corsrouter.CORSRouter{}
 	equipmentRouter := router.PathPrefix("/equipment").Subrouter()
 	equipmentRouter.HandleFunc("/", equipmentController.Create).Methods(http.MethodPost)
-	equipmentRouter.HandleFunc("/", equipmentController.Update).Methods(http.MethodPatch)
-	equipmentRouter.HandleFunc("/", equipmentController.List).Methods(http.MethodGet)
-	equipmentRouter.HandleFunc("/{id}", equipmentController.Get).Methods(http.MethodGet)
-	equipmentRouter.HandleFunc("/{id}", equipmentController.Delete).Methods(http.MethodDelete)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.UpdateByIds).Methods(http.MethodPatch)
+	equipmentRouter.HandleFunc("/", equipmentController.UpdateByConditions).Methods(http.MethodPatch)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.DeleteByIds).Methods(http.MethodDelete)
+	equipmentRouter.HandleFunc("/", equipmentController.DeleteByConditions).Methods(http.MethodDelete)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.FindById).Methods(http.MethodGet)
+	equipmentRouter.HandleFunc("/", equipmentController.FindByConditions).Methods(http.MethodGet)
 
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 
