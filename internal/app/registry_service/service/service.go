@@ -1,51 +1,69 @@
 package service
 
-import (
-	"github.com/gofrs/uuid"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
-)
+import "github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 
-type EquipmentRepo interface {
-	List() ([]model.Equipment, error)
-	Create(et model.EquipmentType, ep model.Params) (uuid.UUID, error)
-	Update(id uuid.UUID, status *model.OperationalStatus, parameters model.Params) error
-	FindById(Id uuid.UUID) (*model.Equipment, error)
-	RemoveById(Id uuid.UUID) (bool, error)
+type EquipmentRepository interface {
+	CreateOne(equipmentCreate *dtos.EquipmentCreate) (string, error)
+	CreateMany(equipmentCreate []dtos.EquipmentCreate) ([]string, error)
+	UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) (bool, error)
+	UpdateByIds(equipmentUpdate *dtos.EquipmentUpdate, ids []string) ([]string, error)
+	UpdateByConditions(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) ([]string, error)
+	DeleteById(id string) (bool, error)
+	DeleteByIds(ids []string) ([]string, error)
+	DeleteByConditions(equipmentFilter *dtos.EquipmentFilter) ([]string, error)
+	FindById(id string) (*dtos.EquipmentGet, error)
+	FindByIds(ids []string) ([]dtos.EquipmentGet, error)
+	FindByConditions(equipmentFilter *dtos.EquipmentFilter) ([]dtos.EquipmentGet, error)
 }
 
 type Equipment struct {
-	repo EquipmentRepo
+	repository EquipmentRepository
 }
 
-func NewEquipment(repo EquipmentRepo) Equipment {
-	return Equipment{repo: repo}
+func NewEquipment(repository EquipmentRepository) Equipment {
+	return Equipment{repository: repository}
 }
 
-func (eqs *Equipment) List() ([]model.Equipment, error) {
-	return eqs.repo.List()
+func (service Equipment) CreateOne(equipmentCreate *dtos.EquipmentCreate) (string, error) {
+	return service.repository.CreateOne(equipmentCreate)
 }
 
-func (eqs *Equipment) Create(eqt model.EquipmentType, eqp model.Params) (uuid.UUID, error) {
-	return eqs.repo.Create(eqt, eqp)
+func (service Equipment) CreateMany(equipmentCreate []dtos.EquipmentCreate) ([]string, error) {
+	return service.repository.CreateMany(equipmentCreate)
 }
 
-func (eqs *Equipment) Update(id uuid.UUID, eqos *model.OperationalStatus, eqp model.Params) error {
-	return eqs.repo.Update(id, eqos, eqp)
+func (service Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) (bool, error) {
+	return service.repository.UpdateById(equipmentUpdate, id)
 }
 
-func (eqs *Equipment) Get(eqId string) (*model.Equipment, error) {
-	id, err := uuid.FromString(eqId)
-	if err != nil {
-		return nil, err
-	}
-
-	return eqs.repo.FindById(id)
+func (service Equipment) UpdateByIds(equipmentUpdate *dtos.EquipmentUpdate, ids []string) ([]string, error) {
+	return service.repository.UpdateByIds(equipmentUpdate, ids)
 }
 
-func (eqs *Equipment) Delete(eqId string) (bool, error) {
-	id, err := uuid.FromString(eqId)
-	if err != nil {
-		return false, err
-	}
-	return eqs.repo.RemoveById(id)
+func (service Equipment) UpdateByConditions(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	return service.repository.UpdateByConditions(equipmentUpdate, equipmentFilter)
+}
+
+func (service Equipment) DeleteById(id string) (bool, error) {
+	return service.repository.DeleteById(id)
+}
+
+func (service Equipment) DeleteByIds(ids []string) ([]string, error) {
+	return service.repository.DeleteByIds(ids)
+}
+
+func (service Equipment) DeleteByConditions(equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	return service.repository.DeleteByConditions(equipmentFilter)
+}
+
+func (service Equipment) FindById(id string) (*dtos.EquipmentGet, error) {
+	return service.repository.FindById(id)
+}
+
+func (service Equipment) FindByIds(ids []string) ([]dtos.EquipmentGet, error) {
+	return service.repository.FindByIds(ids)
+}
+
+func (service Equipment) FindByConditions(equipmentFilter *dtos.EquipmentFilter) ([]dtos.EquipmentGet, error) {
+	return service.repository.FindByConditions(equipmentFilter)
 }

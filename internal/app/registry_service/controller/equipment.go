@@ -1,10 +1,11 @@
 package controller
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/service"
 )
 
@@ -16,128 +17,166 @@ func NewEquipment(service service.Equipment) Equipment {
 	return Equipment{service: service}
 }
 
-func (eqc *Equipment) List(w http.ResponseWriter, r *http.Request) {
-	eql, err := eqc.service.List()
-	if err != nil {
-		writeMessage(w, http.StatusInternalServerError, "List error: %v", err)
-	} else {
-		writeJSON(w, http.StatusOK, eql)
-	}
-}
-
-func (eqc *Equipment) Create(w http.ResponseWriter, r *http.Request) {
-	// TODO: batch create
-	var j map[string]interface{}
-	if err := readJSON(r, j); err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid JSON data: %v", err)
-		return
-	}
-	eqType, ok := j["type"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "type")
-		return
-	}
-	eqt := model.ParseEquipmentType(eqType.(string))
-	if eqt == nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid equipment type: `%s`", eqType)
-		return
-	}
-	eqParams, ok := j["parameters"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "parameters")
-		return
-	}
-	id, err := eqc.service.Create(*eqt, eqParams.(model.Params))
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Create equipment error: %v", err)
-		return
-	}
-
-	writeMessage(w, http.StatusCreated, "Equipment %s is created", id)
-}
-
-func (eqc *Equipment) Update(w http.ResponseWriter, r *http.Request) {
-	// TODO: batch update
-	vars := mux.Vars(r)
-	eqId, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
-	}
-	id, err := uuid.FromString(eqId)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid UUID: `%s`", eqId)
-	}
-
-	var j map[string]interface{}
-	if err := readJSON(r, j); err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid JSON data: %v", err)
-		return
-	}
-	
-	eqStatus, ok := j["status"]
-	var eqos *model.OperationalStatus
-	if ok {
-		eqos = model.ParseOperationalStatus(eqStatus.(string))
-		if eqos == nil {
-			writeMessage(w, http.StatusBadRequest, "Invalid equipment operational status: `%s`", eqStatus)
-			return
+func (controller *Equipment) Create(writer http.ResponseWriter, request *http.Request) {
+	const action = "create"
+	if equipmentCreate, equipmentCreateMany, err := FromRequestJSON(request); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
+	} else if equipmentCreateMany != nil {
+		if ids, err := controller.service.CreateMany(equipmentCreateMany); err != nil {
+			respondBadRequest(writer, fmt.Errorf(actionFailed, action, err), nil)
+		} else {
+			respondCreated(writer, ids)
 		}
 	} else {
-		eqos = nil
+		if id, err := controller.service.CreateOne(equipmentCreate); err != nil {
+			respondBadRequest(writer, fmt.Errorf(actionFailed, action, err), nil)
+		} else {
+			respondCreated(writer, id)
+		}
 	}
+}
 
-	eqParams, ok := j["parameters"]
-	var eqp model.Params
-	if ok {
-		eqp = eqParams.(model.Params)
+func (controller *Equipment) UpdateByIds(writer http.ResponseWriter, request *http.Request) {
+	const action = "update"
+	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
 	} else {
-		eqp = nil
+		var equipmentUpdate dtos.EquipmentUpdate
+		if err = json.NewDecoder(request.Body).Decode(&equipmentUpdate); err != nil {
+			respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
+		} else {
+			switch ids := idSet.Slice(); len(ids) {
+				case 0:
+					respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
+				case 1: // Single id
+					var found bool
+					if found, err = controller.service.UpdateById(&equipmentUpdate, ids[0]); err != nil {
+						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+					} else if !found {
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
+					} else {
+						respondNoContent(writer)
+					}
+				default:
+					if updatedIds, err := controller.service.UpdateByIds(&equipmentUpdate, ids); err != nil {
+						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+					} else if len(updatedIds) == 0 {
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+					} else {
+						idSet.ExcludeMultiply(updatedIds...)
+						if idSet.IsEmpty() {
+							respondNoContent(writer)
+						} else {
+							respondMulti(writer, map[string]interface{}{"updated": updatedIds, "unfound": idSet.Slice()})
+						}
+					}
+			}
+		}
 	}
-
-	err = eqc.service.Update(id, eqos, eqp)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Update equipment `%s` error: %v", id, err)
-		return
-	}
-
-	writeMessage(w, http.StatusOK, "Equipment %s is updated", id)
 }
 
-func (eqc *Equipment) Get(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
+func (controller *Equipment) UpdateByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "update"
+	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
+	} else {
+		var equipmentUpdate dtos.EquipmentUpdate
+		if err = json.NewDecoder(request.Body).Decode(&equipmentUpdate); err != nil {
+			respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
+		} else if ids, err := controller.service.UpdateByConditions(&equipmentUpdate, equipmentFilter); err != nil {
+			respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+		} else {
+			respondOK(writer, ids)
+		}
 	}
-	eq, err := eqc.service.Get(id)
-	if err != nil {
-		writeMessage(w, http.StatusNotFound, "Get equipment `%s` error: %v", id, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, eq)
 }
 
-func (eqc *Equipment) Delete(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
+func (controller *Equipment) DeleteByIds(writer http.ResponseWriter, request *http.Request) {
+	const action = "delete"
+	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
+	} else {
+		switch ids := idSet.Slice(); len(ids) {
+			case 0:
+				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
+			case 1: // Single id
+				var found bool
+				if found, err = controller.service.DeleteById(ids[0]); err != nil {
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+				} else if !found {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
+				} else {
+					respondNoContent(writer)
+				}
+			default: // Multiply ids
+				if deletedIds, err := controller.service.DeleteByIds(ids); err != nil {
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+				} else if len(deletedIds) == 0 {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+				} else {
+					idSet.ExcludeMultiply(deletedIds...)
+					if idSet.IsEmpty() {
+						respondNoContent(writer)
+					} else {
+						respondMulti(writer, map[string]interface{}{"deleted": deletedIds, "unfound": idSet.Slice()})
+					}
+				}
+		}
 	}
+}
 
-	deleted, err := eqc.service.Delete(id)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Delete equipment `%s` error: %v", id, err)
-		return
+func (controller *Equipment) DeleteByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "delete"
+	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
+	} else if ids, err := controller.service.DeleteByConditions(equipmentFilter); err != nil {
+		respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+	} else {
+		respondOK(writer, ids)
 	}
+}
 
-	if !deleted {
-		writeMessage(w, http.StatusNotFound, "Unable to find equipment `%s` for deleting", id)
-		return
+
+func (controller *Equipment) FindById(writer http.ResponseWriter, request *http.Request) {
+	const action = "search"
+	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
+	} else {
+		switch ids := idSet.Slice(); len(ids) {
+			case 0:
+				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
+			case 1: // Single id
+				if equipmentGet, err := controller.service.FindById(ids[0]); err != nil {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+				} else {
+					respondOK(writer, equipmentGet)
+				}
+			default: // Multiply ids
+				if foundEquipment, err := controller.service.FindByIds(ids); err != nil {
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+				} else if len(foundEquipment) == 0 {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+				} else {
+					for _, equipment := range foundEquipment {
+						idSet.Exclude(equipment.Id)
+					}
+					if idSet.IsEmpty() {
+						respondOK(writer, foundEquipment)
+					} else {
+						respondMulti(writer, map[string]interface{}{"found": foundEquipment, "unfound": idSet.Slice()})
+					}
+				}
+		}
 	}
+}
 
-	writeMessage(w, http.StatusOK, "Equipment %s was deleted", id)
+func (controller *Equipment) FindByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "search"
+	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
+	} else if equipments, err := controller.service.FindByConditions(equipmentFilter); err != nil {
+		respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+	} else {
+		respondOK(writer, equipments)
+	}
 }

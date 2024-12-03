@@ -21,19 +21,21 @@ func main() {
 	}
 	defer db.Close()
 
-	repo := repository.NewEquipment(db)
-	eqController := controller.NewEquipment(
-		service.NewEquipment(&repo),
+	equipmentRepository := repository.NewEquipment(db)
+	equipmentController := controller.NewEquipment(
+		service.NewEquipment(equipmentRepository),
 	)
 
 	// Configure router
 	router := corsrouter.CORSRouter{}
-	eqRouter := router.PathPrefix("/equipment").Subrouter()
-	eqRouter.HandleFunc("/", eqController.List).Methods("GET")
-	eqRouter.HandleFunc("/", eqController.Create).Methods("POST")
-	eqRouter.HandleFunc("/{id}", eqController.Update).Methods("PUT")
-	eqRouter.HandleFunc("/{id}", eqController.Get).Methods("GET")
-	eqRouter.HandleFunc("/{id}", eqController.Delete).Methods("DELETE")
+	equipmentRouter := router.PathPrefix("/equipment").Subrouter()
+	equipmentRouter.HandleFunc("/", equipmentController.Create).Methods(http.MethodPost)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.UpdateByIds).Methods(http.MethodPatch)
+	equipmentRouter.HandleFunc("/", equipmentController.UpdateByConditions).Methods(http.MethodPatch)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.DeleteByIds).Methods(http.MethodDelete)
+	equipmentRouter.HandleFunc("/", equipmentController.DeleteByConditions).Methods(http.MethodDelete)
+	equipmentRouter.HandleFunc("/{id}", equipmentController.FindById).Methods(http.MethodGet)
+	equipmentRouter.HandleFunc("/", equipmentController.FindByConditions).Methods(http.MethodGet)
 
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 
