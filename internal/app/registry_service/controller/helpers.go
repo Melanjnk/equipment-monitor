@@ -13,7 +13,6 @@ import (
 const(
 	parameterIsRequired		= "Parameter `%s` is required for %s."
 	invalidJSONData			= "Invalid JSON data: `%v`"
-	equipmentNotCreated		= "Failed to create equipment: %v"
 	equipmentNotFound		= "Unable to find equipment #%v for %s"
 	invalidEquipmentId		= "Invalid id of equipment to %s: %v"
 	invalidGETParameters	= "Invalid GET parameters on %s: %v"
@@ -30,12 +29,20 @@ func respond(writer http.ResponseWriter, status int, data interface{}) {
 	}
 }
 
+func respondNoContent(writer http.ResponseWriter) {
+	respond(writer, http.StatusNoContent, nil)
+}
+
 func respondCreated(writer http.ResponseWriter, data interface{}) {
 	respond(writer, http.StatusCreated, data)
 }
 
 func respondOK(writer http.ResponseWriter, data interface{}) {
 	respond(writer, http.StatusOK, data)
+}
+
+func respondMulti(writer http.ResponseWriter, data interface{}) {
+	respond(writer, http.StatusMultiStatus, data)
 }
 
 func respondError(writer http.ResponseWriter, status int, err error, extra interface{}) {
@@ -52,6 +59,10 @@ func respondBadRequest(writer http.ResponseWriter, err error, extra interface{})
 
 func respondNotFound(writer http.ResponseWriter, err error, extra interface{}) {
 	respondError(writer, http.StatusNotFound, err, extra)
+}
+
+func respondInternalError(writer http.ResponseWriter, err error, extra interface{}) {
+	respondError(writer, http.StatusInternalServerError, err, extra)
 }
 
 func isBreaker(b byte) bool {
@@ -130,16 +141,4 @@ func FromRequestJSON(request *http.Request) (*dtos.EquipmentCreate, []dtos.Equip
 	}
 ERROR:
 	return nil, nil, err
-}
-
-func splitSucceededAndFailed(success, fail string, idSet StringSet, succeededIds ...string) map[string][]string {
-	response := make(map[string][]string)
-	if len(succeededIds) > 0 {
-		response[success] = succeededIds
-		idSet.ExcludeMultiply(succeededIds...)
-	}
-	if ids := idSet.Slice(); len(ids) > 0 {
-		response[fail] = ids
-	}
-	return response
 }

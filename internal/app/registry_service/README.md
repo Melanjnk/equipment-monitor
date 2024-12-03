@@ -40,14 +40,16 @@ Response:
 
 `/{id0,id1...}` -- update existing pieces of equipment with given `id`s.
 
-* 200 (OK) on success. Returned JSON object contains fields:
-    - `"updated"` -- array of updated `id`s (missing if no requested `id` was found);
-    - `"unfound"` -- array of not found `id`s (missing if every requested `id` was found).
-* Errors on fail.
+* 204 (No content) on success.
+* 207 (MultiStatus) on partial success. Returned JSON object contains fields:
+    - `"updated"` -- array of updated `id`s;
+    - `"unfound"` -- array of not found `id`s.
+* 404 (Not found) if none of `id`s was found.
+* Other errors on fail.
 
 `/` -- update existing pieces of equipment filtered by URL-parameters (see section **Filtering** below).
 
-* 200 (OK) on success. Updated Ids are returned as JSON array of strings.
+* 200 (OK) on success. Updated `id`s are returned as JSON array of strings.
 * Errors on fail.
 
 ### Delete \[DELETE\]
@@ -62,10 +64,12 @@ Response:
 
 `/{id0,id1...}` -- delete existing pieces of equipment with given `id`s.
 
-* 200 (OK) on success. Returned JSON object contains fields:
-    - `"deleted"` -- array of deleted `id`s (missing if no requested `id` was found);
-    - `"unfound"` -- array of not found `id`s (missing if every requested `id` was found).
-* Errors on fail.
+* 204 (No content) on success.
+* 207 (MultiStatus) on partial success. Returned JSON object contains fields:
+    - `"deleted"` -- array of deleted `id`s;
+    - `"unfound"` -- array of not found `id`s.
+* 404 (Not found) if none of `id`s was found.
+* Other errors on fail.
 
 `/` -- delete existing pieces of equipment filtered by URL-parameters (see section **Filtering** below).
 
@@ -83,10 +87,12 @@ Response:
 
 Response:
 
-* 200 (OK) on success. Returned JSON array contains fields:
-    `"found"` -- array of found *pieces of equipment* (missing if no requested `id` was found);
-    `"unfound"` -- array of not found `id`s (missing if every requested `id` was found).
-* Errors on fail.
+* 200 (OK) on success. Returned JSON object contains array of found pieces of equipment.
+* 207 (Multistatus) on partial success. Returned JSON array contains fields:
+    `"found"` -- array of found *pieces of equipment*;
+    `"unfound"` -- array of not found `id`s.
+* 404 (Not found) if none of `id`s was found.
+* Other errors on fail.
 
 `/` -- find pieces of equipment filtered by URL-parameters (see section **Filtering** below).
 

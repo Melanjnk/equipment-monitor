@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
@@ -33,13 +35,21 @@ func (repository *Equipment) CreateMany(equipmentCreate []dtos.EquipmentCreate) 
 	return parseRows(repository.db.NamedQuery(insertEquipment, equipmentCreate))
 }
 
-func (repository *Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) error {
-	if sql := updateSQL(equipmentUpdate, `UPDATE equipment SET %s WHERE id=%s`, id); len(sql) == 0 {
-		return nil
-	} else {
-		_, err := repository.db.NamedExec(sql, equipmentUpdate)
-		return err
+func (repository *Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) (bool, error) {
+	if query := updateSQL(equipmentUpdate, `UPDATE equipment SET %s WHERE id='%s' RETURNING id`, id); len(query) > 0 {
+		updateOne, err := repository.db.PrepareNamed(query)
+		if err == nil {
+			var updatedId string
+			err = updateOne.Get(&updatedId, equipmentUpdate)
+			if err == nil {
+				return true, nil
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return false, err
+			}
+		}
 	}
+	return false, nil
 }
 
 func (repository *Equipment) UpdateByIds(equipmentUpdate *dtos.EquipmentUpdate, ids []string) ([]string, error) {
@@ -76,15 +86,16 @@ func (repository *Equipment) UpdateByConditions(equipmentUpdate *dtos.EquipmentU
 	}
 }
 
-func (repository *Equipment) DeleteById(id string) error {
+func (repository *Equipment) DeleteById(id string) (bool, error) {
 	var deletedId string
 	err := repository.db.Get(&deletedId, fmt.Sprintf(`DELETE FROM equipment WHERE id='%s' RETURNING id`, id))
 	if err == nil {
-		if id != deletedId {
-			err = fmt.Errorf("Unable to find equipment #%s for deleting", id)
-		}
+		return true, nil
 	}
-	return err
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (repository *Equipment) DeleteByIds(ids []string) ([]string, error) {

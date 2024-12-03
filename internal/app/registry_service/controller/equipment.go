@@ -18,17 +18,18 @@ func NewEquipment(service service.Equipment) Equipment {
 }
 
 func (controller *Equipment) Create(writer http.ResponseWriter, request *http.Request) {
+	const action = "create"
 	if equipmentCreate, equipmentCreateMany, err := FromRequestJSON(request); err != nil {
 		respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
 	} else if equipmentCreateMany != nil {
 		if ids, err := controller.service.CreateMany(equipmentCreateMany); err != nil {
-			respondBadRequest(writer, fmt.Errorf(equipmentNotCreated, err), nil)
+			respondBadRequest(writer, fmt.Errorf(actionFailed, action, err), nil)
 		} else {
 			respondCreated(writer, ids)
 		}
 	} else {
 		if id, err := controller.service.CreateOne(equipmentCreate); err != nil {
-			respondBadRequest(writer, fmt.Errorf(equipmentNotCreated, err), nil)
+			respondBadRequest(writer, fmt.Errorf(actionFailed, action, err), nil)
 		} else {
 			respondCreated(writer, id)
 		}
@@ -36,27 +37,38 @@ func (controller *Equipment) Create(writer http.ResponseWriter, request *http.Re
 }
 
 func (controller *Equipment) UpdateByIds(writer http.ResponseWriter, request *http.Request) {
+	const action = "update"
 	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, "update", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
 	} else {
 		var equipmentUpdate dtos.EquipmentUpdate
-		if err := json.NewDecoder(request.Body).Decode(&equipmentUpdate); err != nil {
+		if err = json.NewDecoder(request.Body).Decode(&equipmentUpdate); err != nil {
 			respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
 		} else {
 			switch ids := idSet.Slice(); len(ids) {
 				case 0:
-					respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", "update"), nil)
+					respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
 				case 1: // Single id
-					if err = controller.service.UpdateById(&equipmentUpdate, ids[0]); err != nil {
-						respondNotFound(writer, fmt.Errorf(equipmentNotFound, "update", err), nil) // TODO: check other reasons
+					var found bool
+					if found, err = controller.service.UpdateById(&equipmentUpdate, ids[0]); err != nil {
+						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+					} else if !found {
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
 					} else {
-						respond(writer, http.StatusNoContent, nil)
+						respondNoContent(writer)
 					}
 				default:
 					if updatedIds, err := controller.service.UpdateByIds(&equipmentUpdate, ids); err != nil {
-						respondBadRequest(writer, fmt.Errorf(actionFailed, "update", err), ids)
+						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+					} else if len(updatedIds) == 0 {
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
 					} else {
-						respondOK(writer, splitSucceededAndFailed("updated", "unfound", idSet, updatedIds...))
+						idSet.ExcludeMultiply(updatedIds...)
+						if idSet.IsEmpty() {
+							respondNoContent(writer)
+						} else {
+							respondMulti(writer, map[string]interface{}{"updated": updatedIds, "unfound": idSet.Slice()})
+						}
 					}
 			}
 		}
@@ -64,14 +76,15 @@ func (controller *Equipment) UpdateByIds(writer http.ResponseWriter, request *ht
 }
 
 func (controller *Equipment) UpdateByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "update"
 	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, "update", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
 	} else {
 		var equipmentUpdate dtos.EquipmentUpdate
 		if err = json.NewDecoder(request.Body).Decode(&equipmentUpdate); err != nil {
 			respondBadRequest(writer, fmt.Errorf(invalidJSONData, err), nil)
 		} else if ids, err := controller.service.UpdateByConditions(&equipmentUpdate, equipmentFilter); err != nil {
-			respondBadRequest(writer, fmt.Errorf(actionFailed, "update", err), nil) // TODO: BadRequest?
+			respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
 		} else {
 			respondOK(writer, ids)
 		}
@@ -79,33 +92,45 @@ func (controller *Equipment) UpdateByConditions(writer http.ResponseWriter, requ
 }
 
 func (controller *Equipment) DeleteByIds(writer http.ResponseWriter, request *http.Request) {
+	const action = "delete"
 	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, "delete", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
 	} else {
 		switch ids := idSet.Slice(); len(ids) {
 			case 0:
-				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", "delete"), nil)
+				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
 			case 1: // Single id
-				if err = controller.service.DeleteById(ids[0]); err != nil {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, "delete", err), nil) // TODO: check other reasons
+				var found bool
+				if found, err = controller.service.DeleteById(ids[0]); err != nil {
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
+				} else if !found {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
 				} else {
-					respond(writer, http.StatusNoContent, nil)
+					respondNoContent(writer)
 				}
 			default: // Multiply ids
 				if deletedIds, err := controller.service.DeleteByIds(ids); err != nil {
-					respondBadRequest(writer, fmt.Errorf(actionFailed, "delete", err), ids)
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+				} else if len(deletedIds) == 0 {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
 				} else {
-					respondOK(writer, splitSucceededAndFailed("deleted", "unfound", idSet, deletedIds...))
+					idSet.ExcludeMultiply(deletedIds...)
+					if idSet.IsEmpty() {
+						respondNoContent(writer)
+					} else {
+						respondMulti(writer, map[string]interface{}{"deleted": deletedIds, "unfound": idSet.Slice()})
+					}
 				}
 		}
 	}
 }
 
 func (controller *Equipment) DeleteByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "delete"
 	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, "delete", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
 	} else if ids, err := controller.service.DeleteByConditions(equipmentFilter); err != nil {
-		respondBadRequest(writer, fmt.Errorf(actionFailed, "delete", err), nil) // TODO: BadRequest?
+		respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
 	} else {
 		respondOK(writer, ids)
 	}
@@ -113,43 +138,44 @@ func (controller *Equipment) DeleteByConditions(writer http.ResponseWriter, requ
 
 
 func (controller *Equipment) FindById(writer http.ResponseWriter, request *http.Request) {
+	const action = "search"
 	if idSet, err := parseIds(mux.Vars(request)["id"]); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, "delete", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidEquipmentId, action, err), nil)
 	} else {
 		switch ids := idSet.Slice(); len(ids) {
 			case 0:
-				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", "search"), nil)
+				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
 			case 1: // Single id
 				if equipmentGet, err := controller.service.FindById(ids[0]); err != nil {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, "search", err), ids[0])
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
 				} else {
 					respondOK(writer, equipmentGet)
 				}
 			default: // Multiply ids
 				if foundEquipment, err := controller.service.FindByIds(ids); err != nil {
-					respondBadRequest(writer, fmt.Errorf(actionFailed, "search", err), ids)
+					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
+				} else if len(foundEquipment) == 0 {
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
 				} else {
-					response := make(map[string]interface{})
-					if len(foundEquipment) > 0 {
-						response["found"] = foundEquipment
-						for _, equipment := range foundEquipment {
-							idSet.Exclude(equipment.Id)
-						}
+					for _, equipment := range foundEquipment {
+						idSet.Exclude(equipment.Id)
 					}
-					if !idSet.IsEmpty() {
-						response["unfound"] = idSet.Slice()
+					if idSet.IsEmpty() {
+						respondOK(writer, foundEquipment)
+					} else {
+						respondMulti(writer, map[string]interface{}{"found": foundEquipment, "unfound": idSet.Slice()})
 					}
-					respondOK(writer, response)
 				}
 		}
 	}
 }
 
 func (controller *Equipment) FindByConditions(writer http.ResponseWriter, request *http.Request) {
+	const action = "search"
 	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
-		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, "search", err), nil)
+		respondBadRequest(writer, fmt.Errorf(invalidGETParameters, action, err), nil)
 	} else if equipments, err := controller.service.FindByConditions(equipmentFilter); err != nil {
-		respondBadRequest(writer, fmt.Errorf(actionFailed, "search", err), nil) // TODO: BadRequest?
+		respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
 	} else {
 		respondOK(writer, equipments)
 	}

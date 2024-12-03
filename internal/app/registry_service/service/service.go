@@ -5,10 +5,10 @@ import "github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos
 type EquipmentRepository interface {
 	CreateOne(equipmentCreate *dtos.EquipmentCreate) (string, error)
 	CreateMany(equipmentCreate []dtos.EquipmentCreate) ([]string, error)
-	UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) error
+	UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) (bool, error)
 	UpdateByIds(equipmentUpdate *dtos.EquipmentUpdate, ids []string) ([]string, error)
 	UpdateByConditions(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) ([]string, error)
-	DeleteById(id string) error
+	DeleteById(id string) (bool, error)
 	DeleteByIds(ids []string) ([]string, error)
 	DeleteByConditions(equipmentFilter *dtos.EquipmentFilter) ([]string, error)
 	FindById(id string) (*dtos.EquipmentGet, error)
@@ -32,7 +32,7 @@ func (service Equipment) CreateMany(equipmentCreate []dtos.EquipmentCreate) ([]s
 	return service.repository.CreateMany(equipmentCreate)
 }
 
-func (service Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) error {
+func (service Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, id string) (bool, error) {
 	return service.repository.UpdateById(equipmentUpdate, id)
 }
 
@@ -44,7 +44,7 @@ func (service Equipment) UpdateByConditions(equipmentUpdate *dtos.EquipmentUpdat
 	return service.repository.UpdateByConditions(equipmentUpdate, equipmentFilter)
 }
 
-func (service Equipment) DeleteById(id string) error {
+func (service Equipment) DeleteById(id string) (bool, error) {
 	return service.repository.DeleteById(id)
 }
 
