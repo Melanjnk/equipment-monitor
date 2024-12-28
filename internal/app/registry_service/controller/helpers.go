@@ -8,6 +8,14 @@ import (
 	"net/http"
 	"github.com/gofrs/uuid"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/stringset"
+)
+
+const(
+	actionCreate = "create"
+	actionUpdate = "update"
+	actionDelete = "delete"
+	actionSearch = "search"
 )
 
 const(
@@ -19,7 +27,7 @@ const(
 	actionFailed			= "Failed to %s: %v"
 )
 
-func respond(writer http.ResponseWriter, status int, data interface{}) {
+func respond(writer http.ResponseWriter, status int, data any) {
 	if data == nil {
 		writer.WriteHeader(status)
 	} else {
@@ -33,35 +41,35 @@ func respondNoContent(writer http.ResponseWriter) {
 	respond(writer, http.StatusNoContent, nil)
 }
 
-func respondCreated(writer http.ResponseWriter, data interface{}) {
+func respondCreated(writer http.ResponseWriter, data any) {
 	respond(writer, http.StatusCreated, data)
 }
 
-func respondOK(writer http.ResponseWriter, data interface{}) {
+func respondOK(writer http.ResponseWriter, data any) {
 	respond(writer, http.StatusOK, data)
 }
 
-func respondMulti(writer http.ResponseWriter, data interface{}) {
+func respondMulti(writer http.ResponseWriter, data any) {
 	respond(writer, http.StatusMultiStatus, data)
 }
 
-func respondError(writer http.ResponseWriter, status int, err error, extra interface{}) {
-	response := map[string]interface{}{"error": err}
+func respondError(writer http.ResponseWriter, status int, err error, extra any) {
+	response := map[string]any{"error": err}
 	if extra != nil {
 		response["details"] = err
 	}
 	respond(writer, status, extra)
 }
 
-func respondBadRequest(writer http.ResponseWriter, err error, extra interface{}) {
+func respondBadRequest(writer http.ResponseWriter, err error, extra any) {
 	respondError(writer, http.StatusBadRequest, err, extra)
 }
 
-func respondNotFound(writer http.ResponseWriter, err error, extra interface{}) {
+func respondNotFound(writer http.ResponseWriter, err error, extra any) {
 	respondError(writer, http.StatusNotFound, err, extra)
 }
 
-func respondInternalError(writer http.ResponseWriter, err error, extra interface{}) {
+func respondInternalError(writer http.ResponseWriter, err error, extra any) {
 	respondError(writer, http.StatusInternalServerError, err, extra)
 }
 
@@ -73,10 +81,19 @@ func isBreaker(b byte) bool {
 	return false
 }
 
-func parseIds(idString string) (StringSet, error) {
+func isDecimal(str string) bool {
+	for _, c := range str {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func parseIds(idString string) (stringset.StringSet, error) {
 	var buffer []byte
 	var b byte
-	ids := NewStringSet()
+	ids := stringset.New()
 	for i, l := 0, len(idString); i < l; i++ {
 		b = idString[i]
 		if isBreaker(b) {

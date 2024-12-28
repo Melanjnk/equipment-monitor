@@ -100,11 +100,14 @@ Response:
   
 Optional filtering parameters (specified in URL after `?`):
 
-* `kind (0...3)` -- equipment of given kind; multiply comma separated values to include multiply kinds; prevents using `no_kind`;
-* `no_kind (0...3)` -- equipment of any kind except given; multiply comma separated values to exclude multiply kinds; prevents using `kind`;
-* `status (0...3)` -- equipment having given operational status; multiply comma separated values to include multiply statuses; prevents using `no_status`;
-* `no_status (0...2)` -- equipment having any status except given; multiply comma separated values to exclude multiply statuses; prevents using `status`;
+* `kind (0...3)` -- equipment of given kind; multiply comma separated values to include multiply kinds; prevents using `~kind`;
+* `~kind (0...3)` -- equipment of any kind except given; multiply comma separated values to exclude multiply kinds; prevents using `kind`;
+* `status (0...3)` -- equipment having given operational status; multiply comma separated values to include multiply statuses; prevents using `~status`;
+* `~status (0...2)` -- equipment having any status except given; multiply comma separated values to exclude multiply statuses; prevents using `status`;
 * `created_since (timestamp)` -- pieces of equipment created not earlier than;
 * `created_until (timestamp)` -- pieces of equipment created not later than;
 * `created_since (timestamp)` -- pieces of equipment updated not earlier than;
 * `created_until (timestamp)` -- pieces of equipment updated not later than.
+* `sort (field names)` -- sort result by given field (or multiply comma separated field names); ascending order is default, descending one can be set by prefixing field name with `-`. Acceptable field names are `id`, `kind`, `status`, `created_at`, `updated_at` (case insensetive); anything else causes error.
+* `limit (int)` -- maximal quantity of results to be retrieved.
+* `offset (int)` -- quantity of results to be skipped before ones to be retrieved.

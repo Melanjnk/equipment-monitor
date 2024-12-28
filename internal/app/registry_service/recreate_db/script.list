@@ -1,0 +1,4 @@
+drop_table_equipment
+create_uuid6_generator
+create_auto_update
+create_table_equipment

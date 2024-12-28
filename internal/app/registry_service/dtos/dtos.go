@@ -4,16 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
+	"strings"
 	"time"
 	"github.com/gorilla/schema"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/stringset"
 )
 
 const (
-	emptyParameters string = "Equipment parameters should not be empty"
+	emptyParameters = "Equipment parameters should not be empty"
 	invalidFieldValue = "Invalid equipment %s value: %d"
 	cannotBeUsedTogether = "Fields `%s` and `%s` cannot be used together"
-	mustPrecede = "%s must precede %s"
+	mustPrecede = "`%s` must precede `%s`"
 )
 
 
@@ -51,20 +54,45 @@ type EquipmentGet = model.Equipment
 
 
 type EquipmentFilter struct {
+	Ids				[]string					`schema:"id"`
+	NoIds			[]string					`schema:"~id"`
 	Kinds			[]model.EquipmentKind		`schema:"kind"`
-	NoKinds			[]model.EquipmentKind		`schema:"no_kind"`
+	NoKinds			[]model.EquipmentKind		`schema:"~kind"`
 	Statuses		[]model.OperationalStatus	`schema:"status"`
-	NoStatuses		[]model.OperationalStatus	`schema:"no_status"`
+	NoStatuses		[]model.OperationalStatus	`schema:"~status"`
 	CreatedSince	*time.Time					`schema:"created_since"`
 	CreatedUntil	*time.Time					`schema:"created_until"`
 	UpdatedSince	*time.Time					`schema:"updated_since"`
 	UpdatedUntil	*time.Time					`schema:"updated_until"`
+	Sort			[]string					`schema:"sort"`
+	SortMask		uint8						`schema:"-"`
+	Limit			*uint						`schema:"limit"`
+	Offset			*uint						`schema:"offset"`
 }
 
+// TODO: func IdIsValid() bool
+
 func (equipmentFilter *EquipmentFilter) Validate() error {
+	if equipmentFilter.Ids != nil {
+		if equipmentFilter.NoIds != nil {
+			return fmt.Errorf(cannotBeUsedTogether, "id", "~id")
+		}
+		for _, id := range equipmentFilter.Ids {
+			if false/*!id.IsValid()*/ {
+				return fmt.Errorf(invalidFieldValue, "id", id)
+			}
+		}
+	} else if equipmentFilter.Ids != nil {
+		for _, id := range equipmentFilter.NoIds {
+			if false/*!id.IsValid()*/ {
+				return fmt.Errorf(invalidFieldValue, "~id", id)
+			}
+		}
+	}
+
 	if equipmentFilter.Kinds != nil {
 		if equipmentFilter.NoKinds != nil {
-			return fmt.Errorf(cannotBeUsedTogether, "kind", "no_kind")
+			return fmt.Errorf(cannotBeUsedTogether, "kind", "~kind")
 		}
 		for _, kind := range equipmentFilter.Kinds {
 			if !kind.IsValid() {
@@ -74,14 +102,14 @@ func (equipmentFilter *EquipmentFilter) Validate() error {
 	} else if equipmentFilter.Kinds != nil {
 		for _, kind := range equipmentFilter.NoKinds {
 			if !kind.IsValid() {
-				return fmt.Errorf(invalidFieldValue, "no_kind", kind)
+				return fmt.Errorf(invalidFieldValue, "~kind", kind)
 			}
 		}
 	}
 	
 	if equipmentFilter.Statuses != nil {
 		if equipmentFilter.NoStatuses != nil {
-			return fmt.Errorf(cannotBeUsedTogether, "status", "no_status")
+			return fmt.Errorf(cannotBeUsedTogether, "status", "~status")
 		}
 		for _, status := range equipmentFilter.Statuses {
 			if !status.IsValid() {
@@ -91,30 +119,56 @@ func (equipmentFilter *EquipmentFilter) Validate() error {
 	} else if equipmentFilter.NoStatuses != nil {
 		for _, status := range equipmentFilter.NoStatuses {
 			if !status.IsValid() {
-				return fmt.Errorf(invalidFieldValue, "no_status", status)
+				return fmt.Errorf(invalidFieldValue, "~status", status)
 			}
 		}
 	}
 
 	if equipmentFilter.CreatedSince != nil {
 		if equipmentFilter.CreatedUntil != nil && equipmentFilter.CreatedSince.After(*equipmentFilter.CreatedUntil) {
-			return fmt.Errorf(mustPrecede, "`created_since`", "`created_until`")
+			return fmt.Errorf(mustPrecede, "created_since", "created_until")
 		}
 		if equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedSince.Before(*equipmentFilter.CreatedSince) {
-			return fmt.Errorf(mustPrecede, "`created_since`", "`updated_since`")
+			return fmt.Errorf(mustPrecede, "created_since", "updated_since")
 		}
 	}
 	if equipmentFilter.UpdatedSince != nil && equipmentFilter.UpdatedUntil != nil && equipmentFilter.UpdatedUntil.Before(*equipmentFilter.UpdatedSince) {
-		return fmt.Errorf(mustPrecede, "`updated_since`", "`updated_until`")
+		return fmt.Errorf(mustPrecede, "updated_since", "updated_until")
 	}
+
+	if equipmentFilter.Sort != nil {
+		fieldNames := stringset.New(`id`, `kind`, `status`, `created_at`, `updated_at`)
+		for i, fieldName := range equipmentFilter.Sort {
+			if normalizeFieldName(&fieldName) {
+				equipmentFilter.SortMask |= 1 << i
+			}
+			if len(fieldName) == 0 {
+				return fmt.Errorf("Sorting field name #%d is empty", i + 1)
+			} else if !fieldNames.Contains(fieldName) {
+				return fmt.Errorf("Invalid or duplicate sorting field name: `%s`", fieldName)
+			}
+			fieldNames.Exclude(fieldName)
+			equipmentFilter.Sort[i] = fieldName
+		}
+	}
+
 	return nil
+}
+
+func EquipmentFilterFromIds(ids []string) *EquipmentFilter {
+	return &EquipmentFilter{Ids: ids}
 }
 
 func EquipmentFilterFromRequest(request *http.Request) (*EquipmentFilter, error) {
 	var err error
 	if err = request.ParseForm(); err == nil {
 		var equipmentFilter EquipmentFilter
-		if err = schema.NewDecoder().Decode(&equipmentFilter, request.Form); err == nil {
+		decoder := schema.NewDecoder()
+		// Provide splitting paratemer's comma separated value:
+		decoder.RegisterConverter([]string{}, func(values string) reflect.Value {
+			return reflect.ValueOf(strings.Split(values, `,`))
+		})
+		if err = decoder.Decode(&equipmentFilter, request.Form); err == nil {
 			if err = equipmentFilter.Validate(); err == nil {
 				return &equipmentFilter, nil
 			}

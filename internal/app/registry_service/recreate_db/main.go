@@ -1,30 +1,39 @@
 package main
 
 import (
+	"fmt"
 	"log"
-	"github.com/jmoiron/sqlx"
+	"os"
+	"strings"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/database"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/migrations"
 )
 
 func main() {
 	db, err := database.Connect(
-		"postgres", "localhost", 54327, "equipment_api", "postgres", "postgres", false,
+		`postgres`, `localhost`, 54327, `equipment_api`, `postgres`, `postgres`, false,
 	)
-	if err != nil {
-		log.Fatalln(err)
-		panic(err)
-	}
-	defer db.Close()
-	for _, function := range []func(*sqlx.DB) error {
-		migrations.DropTableEquipment,
-		migrations.CreateGeneratorUUIDv6,
-		migrations.CreateAutoUpdate,
-		migrations.CreateTableEquipment,
-	} {
-		if err := function(db); err != nil {
-			log.Fatalln(err)
-			panic(err)
+	if err == nil {
+		defer db.Close()
+
+		const basePath = `./internal/app/registry_service/recreate_db/`
+		var content []byte
+		if content, err = os.ReadFile(basePath + `script.list`); err == nil {
+			for _, scriptName := range strings.Split(string(content), "\n") {
+				if scriptName = strings.TrimSpace(scriptName); len(scriptName) > 0 {
+					content, err = os.ReadFile(fmt.Sprintf(`%ssql/%s.sql`, basePath, scriptName))
+					if err != nil {
+						goto ERROR
+					}
+					_, err = db.Exec(string(content))
+					if err != nil {
+						goto ERROR
+					}
+				}
+			}
+			return // Success
 		}
 	}
+ERROR:
+	log.Fatalln(err)
+	panic(err)
 }

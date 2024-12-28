@@ -76,9 +76,9 @@ func ParseOperationalStatus(str string) *OperationalStatus {
 }
 
 
-type EquipmentParameters map[string]interface{}
+type EquipmentParameters map[string]any
 
-func (parameters *EquipmentParameters) Scan(value interface{}) error {
+func (parameters *EquipmentParameters) Scan(value any) error {
 	switch v := value.(type) {
 		case []byte:
 			return json.Unmarshal(v, parameters)
