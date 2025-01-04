@@ -42,7 +42,11 @@ type EquipmentUpdate struct {
 }
 
 func (equipmentUpdate EquipmentUpdate) Validate() error {
-	if equipmentUpdate.Status != nil && !equipmentUpdate.Status.IsValid() {
+	if equipmentUpdate.Status == nil {
+		if equipmentUpdate.Parameters == nil {
+			return fmt.Errorf("No parameters to update.")
+		}
+	} else if !equipmentUpdate.Status.IsValid() {
 		return fmt.Errorf("Invalid Equipment.Status: %d", *equipmentUpdate.Status)
 	}
 	// TODO: check non-empty Parameters
@@ -70,7 +74,56 @@ type EquipmentFilter struct {
 	Offset			*uint						`schema:"offset"`
 }
 
-// TODO: func IdIsValid() bool
+func IsValidUUID(str string) bool {
+	characters := []byte(str)
+	i := len(characters)
+	if i != 36 {
+		return false
+	}
+	for i > 24 {
+		i--
+		if !isHexadecimalDigit(characters[i]) {
+			return false
+		}
+	}
+	if i--; characters[i] != '-' {
+		return false
+	}
+	for i > 19 {
+		i--
+		if !isHexadecimalDigit(characters[i]) {
+			return false
+		}
+	}
+	if i--; characters[i] != '-' {
+		return false
+	}
+	for i > 14 {
+		i--
+		if !isHexadecimalDigit(characters[i]) {
+			return false
+		}
+	}
+	if i--; characters[i] != '-' {
+		return false
+	}
+	for i > 9 {
+		i--
+		if !isHexadecimalDigit(characters[i]) {
+			return false
+		}
+	}
+	if i--; characters[i] != '-' {
+		return false
+	}
+	for i > 0 {
+		i--
+		if !isHexadecimalDigit(characters[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 func (equipmentFilter *EquipmentFilter) Validate() error {
 	if equipmentFilter.Ids != nil {
@@ -78,13 +131,13 @@ func (equipmentFilter *EquipmentFilter) Validate() error {
 			return fmt.Errorf(cannotBeUsedTogether, "id", "~id")
 		}
 		for _, id := range equipmentFilter.Ids {
-			if false/*!id.IsValid()*/ {
+			if !IsValidUUID(id) {
 				return fmt.Errorf(invalidFieldValue, "id", id)
 			}
 		}
-	} else if equipmentFilter.Ids != nil {
+	} else if equipmentFilter.NoIds != nil {
 		for _, id := range equipmentFilter.NoIds {
-			if false/*!id.IsValid()*/ {
+			if !IsValidUUID(id) {
 				return fmt.Errorf(invalidFieldValue, "~id", id)
 			}
 		}
@@ -99,7 +152,7 @@ func (equipmentFilter *EquipmentFilter) Validate() error {
 				return fmt.Errorf(invalidFieldValue, "kind", kind)
 			}
 		}
-	} else if equipmentFilter.Kinds != nil {
+	} else if equipmentFilter.NoKinds != nil {
 		for _, kind := range equipmentFilter.NoKinds {
 			if !kind.IsValid() {
 				return fmt.Errorf(invalidFieldValue, "~kind", kind)

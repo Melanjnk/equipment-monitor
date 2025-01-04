@@ -11,6 +11,14 @@ func isWhiteSpace(character byte) bool {
 	}
 }
 
+func isDecimalDigit(character byte) bool {
+	return character >= '0' && character <= '9'
+}
+
+func isHexadecimalDigit(character byte) bool {
+	return isDecimalDigit(character) || character >= 'A' && character <= 'F' || character >= 'a' && character <= 'f'
+}
+
 func normalizeFieldName(fieldName *string) bool {
 	for end := len(*fieldName); end > 0; {
 		end--

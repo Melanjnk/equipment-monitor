@@ -21,10 +21,10 @@ func main() {
 	}
 	defer db.Close()
 
-	equipmentRepository := repository.NewEquipment(db)
 	equipmentController := controller.NewEquipment(
-		service.NewEquipment(equipmentRepository),
+		service.NewEquipment(repository.NewEquipment(db)),
 	)
+	defer equipmentController.Close()
 
 	// Configure router
 	router := corsrouter.CORSRouter{}

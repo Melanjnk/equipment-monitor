@@ -31,7 +31,7 @@ ERROR:
 
 // processParam checks whether `id`/`no_id`, `kind`/`no_kind` and `status`/`no_status` arguments are used,
 // and serializes corresponding conditions to `conditions` slice.
-func processParam[P model.EquipmentKind|model.OperationalStatus|string](conditions *[]string, args arguments, paramName string, param, noParam []P) {
+func processParam[P model.EquipmentKind|model.OperationalStatus|string](conditions *[]string, args arguments, paramName string, param, noParam []P) bool {
 	var p []P
 	var b bool
 	var builder strings.Builder
@@ -42,12 +42,12 @@ func processParam[P model.EquipmentKind|model.OperationalStatus|string](conditio
 		p = noParam
 		b = false
 	} else {
-		return
+		return false
 	}
 	builder.WriteString(paramName)
 	switch i := len(p); i {
 		case 0:
-			return
+			return false
 		case 1:
 			if b {
 				builder.WriteByte('=')
@@ -58,6 +58,7 @@ func processParam[P model.EquipmentKind|model.OperationalStatus|string](conditio
 			builder.WriteByte(':')
 			builder.WriteString(paramName)
 			args[paramName] = p[0]
+			b = false
 		default:
 			if !b {
 				builder.WriteString(` NOT`)
@@ -66,17 +67,19 @@ func processParam[P model.EquipmentKind|model.OperationalStatus|string](conditio
 			builder.WriteString(paramName)
 			builder.WriteByte(')')
 			args[paramName] = p
+			b = true
 	}
 	*conditions = append(*conditions, builder.String())
+	return b
 }
 
 // Return true if IN operator is used at least once, false otherwise.
-func getConditions(builder *strings.Builder, equipmentFilter *dtos.EquipmentFilter, args arguments) {
+func getConditions(builder *strings.Builder, equipmentFilter *dtos.EquipmentFilter, args arguments) bool {
 	conditions := make([]string, 0, 7) // Capacity == maximal number of possible simultaneous conditions
 
-	processParam(&conditions, args, `id`, equipmentFilter.Ids, equipmentFilter.NoIds)
-	processParam(&conditions, args, `kind`, equipmentFilter.Kinds, equipmentFilter.NoKinds)
-	processParam(&conditions, args, `status`, equipmentFilter.Statuses, equipmentFilter.NoStatuses)
+	result := processParam(&conditions, args, `id`, equipmentFilter.Ids, equipmentFilter.NoIds)
+	result = processParam(&conditions, args, `kind`, equipmentFilter.Kinds, equipmentFilter.NoKinds) || result
+	result = processParam(&conditions, args, `status`, equipmentFilter.Statuses, equipmentFilter.NoStatuses) || result
 
 	processTimeParam := func(param *time.Time, paramName string, condition string) {
 		if param != nil {
@@ -102,15 +105,16 @@ func getConditions(builder *strings.Builder, equipmentFilter *dtos.EquipmentFilt
 			builder.WriteString(` AND `)
 		}
 	}
+	return result
 }
 
-func updateSQL(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) (string, arguments) {
+func updateSQL(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) (string, any, error) {
 	const update = `UPDATE equipment SET `
 	var args arguments
 	var builder strings.Builder
 	if equipmentUpdate.Parameters == nil {
 		if equipmentUpdate.Status == nil {
-			return ``, nil // Nothing to update
+			return ``, nil, nil // Nothing to update
 		}
 		builder.WriteString(update)
 		builder.WriteString(`status=:new_status`)
@@ -127,25 +131,25 @@ func updateSQL(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.Equi
 			args[`new_status`] = equipmentUpdate.Status
 		}
 	}
-	getConditions(&builder, equipmentFilter, args)
+	hasIn := getConditions(&builder, equipmentFilter, args)
 	builder.WriteString(` RETURNING id;`)
-	return builder.String(), args
+	return checkIn(hasIn, &builder, args)
 }
 
-func deleteSQL(equipmentFilter *dtos.EquipmentFilter) (string, arguments) {
+func deleteSQL(equipmentFilter *dtos.EquipmentFilter) (string, any, error) {
 	args := make(arguments)
 	var builder strings.Builder
 	builder.WriteString(`DELETE FROM equipment`)
-	getConditions(&builder, equipmentFilter, args)
+	b := getConditions(&builder, equipmentFilter, args)
 	builder.WriteString(` RETURNING id;`)
-	return builder.String(), args
+	return checkIn(b, &builder, args)
 }
 
-func findSQL(equipmentFilter *dtos.EquipmentFilter) (string, arguments) {
+func findSQL(equipmentFilter *dtos.EquipmentFilter) (string, any, error) {
 	args := make(arguments)
 	var builder strings.Builder
-	builder.WriteString(`SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`)
-	getConditions(&builder, equipmentFilter, args)
+	builder.WriteString(`SELECT id,kind,status,parameters,created_at,updated_at FROM equipment`)
+	hasIn := getConditions(&builder, equipmentFilter, args)
 	if l := len(equipmentFilter.Sort); l > 0 {
 		builder.WriteString(` ORDER BY `)
 		for i := 0; ; {
@@ -167,5 +171,16 @@ func findSQL(equipmentFilter *dtos.EquipmentFilter) (string, arguments) {
 		fmt.Fprintf(&builder, ` OFFSET %d`, *equipmentFilter.Offset)
 	}
 	builder.WriteByte(';')
-	return builder.String(), args
+	return checkIn(hasIn, &builder, args)
+}
+
+func checkIn(hasIn bool, builder *strings.Builder, args arguments) (string, any, error) {
+	if hasIn {
+		query, args, err := sqlx.Named(builder.String(), args)
+		if err != nil {
+			return ``, nil, err
+		}
+		return sqlx.In(query, args...)
+	}
+	return builder.String(), args, nil
 }

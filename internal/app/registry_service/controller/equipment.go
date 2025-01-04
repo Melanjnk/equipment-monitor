@@ -17,6 +17,10 @@ func NewEquipment(service service.Equipment) Equipment {
 	return Equipment{service: service}
 }
 
+func (controller *Equipment) Close() {
+	controller.service.Close()
+}
+
 func (controller *Equipment) Create(writer http.ResponseWriter, request *http.Request) {
 	const action = actionCreate
 	if equipmentCreate, equipmentCreateMany, err := FromRequestJSON(request); err != nil {
@@ -53,7 +57,7 @@ func (controller *Equipment) UpdateByIds(writer http.ResponseWriter, request *ht
 					if found, err = controller.service.UpdateById(&equipmentUpdate, dtos.EquipmentFilterFromIds(ids)); err != nil {
 						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
 					} else if !found {
-						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids[0], action), nil) // TODO: check other reasons
 					} else {
 						respondNoContent(writer)
 					}
@@ -61,7 +65,7 @@ func (controller *Equipment) UpdateByIds(writer http.ResponseWriter, request *ht
 					if updatedIds, err := controller.service.UpdateByIds(&equipmentUpdate, dtos.EquipmentFilterFromIds(ids)); err != nil {
 						respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
 					} else if len(updatedIds) == 0 {
-						respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+						respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids, action), nil)
 					} else {
 						idSet.ExcludeMultiply(updatedIds...)
 						if idSet.IsEmpty() {
@@ -104,7 +108,7 @@ func (controller *Equipment) DeleteByIds(writer http.ResponseWriter, request *ht
 				if found, err = controller.service.DeleteById(dtos.EquipmentFilterFromIds(ids)); err != nil {
 					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), nil)
 				} else if !found {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil) // TODO: check other reasons
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids[0], action), nil) // TODO: check other reasons
 				} else {
 					respondNoContent(writer)
 				}
@@ -112,7 +116,7 @@ func (controller *Equipment) DeleteByIds(writer http.ResponseWriter, request *ht
 				if deletedIds, err := controller.service.DeleteByIds(dtos.EquipmentFilterFromIds(ids)); err != nil {
 					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
 				} else if len(deletedIds) == 0 {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids, action), nil)
 				} else {
 					idSet.ExcludeMultiply(deletedIds...)
 					if idSet.IsEmpty() {
@@ -147,7 +151,7 @@ func (controller *Equipment) FindById(writer http.ResponseWriter, request *http.
 				respondBadRequest(writer, fmt.Errorf(parameterIsRequired, "id", action), nil)
 			case 1: // Single id
 				if equipmentGet, err := controller.service.FindById(dtos.EquipmentFilterFromIds(ids), ); err != nil {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids[0], action), nil)
 				} else {
 					respondOK(writer, equipmentGet)
 				}
@@ -155,7 +159,7 @@ func (controller *Equipment) FindById(writer http.ResponseWriter, request *http.
 				if foundEquipment, err := controller.service.FindByIds(dtos.EquipmentFilterFromIds(ids)); err != nil {
 					respondInternalError(writer, fmt.Errorf(actionFailed, action, err), ids)
 				} else if len(foundEquipment) == 0 {
-					respondNotFound(writer, fmt.Errorf(equipmentNotFound, action, err), nil)
+					respondNotFound(writer, fmt.Errorf(equipmentNotFound, ids, action), nil)
 				} else {
 					for _, equipment := range foundEquipment {
 						idSet.Exclude(equipment.Id)

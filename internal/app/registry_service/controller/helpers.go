@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"github.com/gofrs/uuid"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/stringset"
 )
@@ -21,7 +21,7 @@ const(
 const(
 	parameterIsRequired		= "Parameter `%s` is required for %s."
 	invalidJSONData			= "Invalid JSON data: `%v`"
-	equipmentNotFound		= "Unable to find equipment #%v for %s"
+	equipmentNotFound		= "Unable to find equipment #%v for %v"
 	invalidEquipmentId		= "Invalid id of equipment to %s: %v"
 	invalidGETParameters	= "Invalid GET parameters on %s: %v"
 	actionFailed			= "Failed to %s: %v"
@@ -54,6 +54,7 @@ func respondMulti(writer http.ResponseWriter, data any) {
 }
 
 func respondError(writer http.ResponseWriter, status int, err error, extra any) {
+	log.Printf("ERROR: %s", err)
 	response := map[string]any{"error": err}
 	if extra != nil {
 		response["details"] = err
@@ -111,8 +112,8 @@ func parseIds(idString string) (stringset.StringSet, error) {
 			}
 		}
 		id := string(buffer)
-		if _, err := uuid.FromString(id); err != nil { // Validation
-			return ids, err
+		if !dtos.IsValidUUID(id) {
+			return ids, fmt.Errorf("Invalid UUID: `%s`", id)
 		}
 		ids.Include(id)
 		buffer = buffer[:0]

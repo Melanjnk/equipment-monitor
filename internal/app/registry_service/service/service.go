@@ -24,6 +24,10 @@ func NewEquipment(repository EquipmentRepository) Equipment {
 	return Equipment{repository: repository}
 }
 
+func (service Equipment) Close() {
+	/*service.repository.Close() // How to avoid including method Close in interface? */
+}
+
 func (service Equipment) CreateOne(equipmentCreate *dtos.EquipmentCreate) (string, error) {
 	return service.repository.CreateOne(equipmentCreate)
 }
