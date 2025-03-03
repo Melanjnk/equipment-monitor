@@ -2,9 +2,8 @@ package controller
 
 import (
 	"net/http"
-	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
+	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/service"
 )
 
@@ -16,128 +15,56 @@ func NewEquipment(service service.Equipment) Equipment {
 	return Equipment{service: service}
 }
 
-func (eqc *Equipment) List(w http.ResponseWriter, r *http.Request) {
-	eql, err := eqc.service.List()
-	if err != nil {
-		writeMessage(w, http.StatusInternalServerError, "List error: %v", err)
+func (controller *Equipment) List(writer http.ResponseWriter, request *http.Request) {
+	if equipmentFilter, err := dtos.EquipmentFilterFromRequest(request); err != nil {
+		writeMessage(writer, http.StatusBadRequest, "Invalid GET parameters: %v", err)
+	} else if equipmentList, err := controller.service.List(equipmentFilter); err != nil {
+		writeMessage(writer, http.StatusInternalServerError, "List error: %v", err)
 	} else {
-		writeJSON(w, http.StatusOK, eql)
+		writeJSON(writer, http.StatusOK, equipmentList)
 	}
 }
 
-func (eqc *Equipment) Create(w http.ResponseWriter, r *http.Request) {
-	// TODO: batch create
-	var j map[string]interface{}
-	if err := readJSON(r, j); err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid JSON data: %v", err)
-		return
-	}
-	eqType, ok := j["type"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "type")
-		return
-	}
-	eqt := model.ParseEquipmentType(eqType.(string))
-	if eqt == nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid equipment type: `%s`", eqType)
-		return
-	}
-	eqParams, ok := j["parameters"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "parameters")
-		return
-	}
-	id, err := eqc.service.Create(*eqt, eqParams.(model.Params))
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Create equipment error: %v", err)
-		return
-	}
-
-	writeMessage(w, http.StatusCreated, "Equipment %s is created", id)
-}
-
-func (eqc *Equipment) Update(w http.ResponseWriter, r *http.Request) {
-	// TODO: batch update
-	vars := mux.Vars(r)
-	eqId, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
-	}
-	id, err := uuid.FromString(eqId)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid UUID: `%s`", eqId)
-	}
-
-	var j map[string]interface{}
-	if err := readJSON(r, j); err != nil {
-		writeMessage(w, http.StatusBadRequest, "Invalid JSON data: %v", err)
-		return
-	}
-	
-	eqStatus, ok := j["status"]
-	var eqos *model.OperationalStatus
-	if ok {
-		eqos = model.ParseOperationalStatus(eqStatus.(string))
-		if eqos == nil {
-			writeMessage(w, http.StatusBadRequest, "Invalid equipment operational status: `%s`", eqStatus)
-			return
-		}
+func (controller *Equipment) Create(writer http.ResponseWriter, request *http.Request) {
+	if equipmentCreate, err := dtos.FromRequestJSON[dtos.EquipmentCreate](request); err != nil {
+		writeMessage(writer, http.StatusBadRequest, invalidJSONData, err)
+	} else if id, err := controller.service.Create(equipmentCreate); err != nil {
+		writeMessage(writer, http.StatusBadRequest, "Create equipment error: %v", err)
 	} else {
-		eqos = nil
+		writeMessage(writer, http.StatusCreated, equipmentActionIsPerformed, id, "created")
 	}
+}
 
-	eqParams, ok := j["parameters"]
-	var eqp model.Params
-	if ok {
-		eqp = eqParams.(model.Params)
+func (controller *Equipment) Update(writer http.ResponseWriter, request *http.Request) {
+	if equipmentUpdate, err := dtos.FromRequestJSON[dtos.EquipmentUpdate](request); err != nil {
+		writeMessage(writer, http.StatusBadRequest, invalidJSONData, err)
+	} else if updated, err := controller.service.Update(equipmentUpdate); err != nil {
+		writeMessage(writer, http.StatusBadRequest, equipmentIdError, "Update", equipmentUpdate.Id, err)
+	} else if !updated {
+		writeMessage(writer, http.StatusNotFound, unableToFindEquipment, equipmentUpdate.Id, "updating")
 	} else {
-		eqp = nil
+		writeMessage(writer, http.StatusOK, equipmentActionIsPerformed, equipmentUpdate.Id, "updated")
 	}
-
-	err = eqc.service.Update(id, eqos, eqp)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Update equipment `%s` error: %v", id, err)
-		return
-	}
-
-	writeMessage(w, http.StatusOK, "Equipment %s is updated", id)
 }
 
-func (eqc *Equipment) Get(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
+func (controller *Equipment) Get(writer http.ResponseWriter, request *http.Request) {
+	if id, ok := mux.Vars(request)["id"]; !ok {
+		writeMessage(writer, http.StatusBadRequest, parameterIsRequired, "id")
+	} else if eqg, err := controller.service.Get(id); err != nil {
+		writeMessage(writer, http.StatusNotFound, equipmentIdError, "Get", id, err)
+	} else {
+		writeJSON(writer, http.StatusOK, eqg)
 	}
-	eq, err := eqc.service.Get(id)
-	if err != nil {
-		writeMessage(w, http.StatusNotFound, "Get equipment `%s` error: %v", id, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, eq)
 }
 
-func (eqc *Equipment) Delete(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		writeMessage(w, http.StatusBadRequest, parameterIsRequired, "id")
-		return
+func (controller *Equipment) Delete(writer http.ResponseWriter, request *http.Request) {
+	if id, ok := mux.Vars(request)["id"]; !ok {
+		writeMessage(writer, http.StatusBadRequest, parameterIsRequired, "id")
+	} else if deleted, err := controller.service.Delete(id); err != nil {
+		writeMessage(writer, http.StatusBadRequest, equipmentIdError, "Delete", id, err)
+	} else if !deleted {
+		writeMessage(writer, http.StatusNotFound, unableToFindEquipment, id, "deleting")
+	} else {
+		writeMessage(writer, http.StatusOK, equipmentActionIsPerformed, id, "deleted")
 	}
-
-	deleted, err := eqc.service.Delete(id)
-	if err != nil {
-		writeMessage(w, http.StatusBadRequest, "Delete equipment `%s` error: %v", id, err)
-		return
-	}
-
-	if !deleted {
-		writeMessage(w, http.StatusNotFound, "Unable to find equipment `%s` for deleting", id)
-		return
-	}
-
-	writeMessage(w, http.StatusOK, "Equipment %s was deleted", id)
 }
