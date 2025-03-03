@@ -1,9 +1,11 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
-	"github.com/gofrs/uuid"
 )
 
 type EquipmentKind int16
@@ -74,16 +76,34 @@ func ParseOperationalStatus(str string) *OperationalStatus {
 }
 
 
-type Equipment struct {
-	Id			uuid.UUID			`db:"id,pk"								json:"equipment_id"`
-	Kind		EquipmentKind		`db:"kind,not null,type:smallserial"	json:"kind"`
-	Status		OperationalStatus	`db:"status,not null,type:smallserial"	json:"status"`
-	Parameters	[]byte				`db:"parameters,not null,type:jsonb"	json:"parameters"`
-	CreatedAt	time.Time			`db:"created_at,not null"				json:"created_at"`
-	UpdatedAt	time.Time			`db:"updated_at,not null"				json:"updated_at"`
+type EquipmentParameters map[string]any
+
+func (parameters *EquipmentParameters) Scan(value any) error {
+	switch v := value.(type) {
+		case []byte:
+			return json.Unmarshal(v, parameters)
+		case string:
+			return json.Unmarshal([]byte(v), parameters)
+	}
+	return fmt.Errorf("Failed to unmarshal JSONB value: %v", value)
 }
 
-func NewEquipment(kind EquipmentKind, parameters []byte) Equipment {
+func (parameters EquipmentParameters) Value() (driver.Value, error) {
+    bytes, err := json.Marshal(parameters)
+    return string(bytes), err
+}
+
+
+type Equipment struct {
+	Id			string				`json:"equipment_id" db:"id,pk"`
+	Kind		EquipmentKind		`json:"kind" db:"kind,not null"`
+	Status		OperationalStatus	`json:"status" db:"status,not null"`
+	Parameters	EquipmentParameters	`json:"parameters" db:"parameters,not null,type:jsonb"`
+	CreatedAt	time.Time			`json:"created_at" db:"created_at,not null"`
+	UpdatedAt	time.Time			`json:"updated_at" db:"updated_at,not null"`
+}
+
+func NewEquipment(kind EquipmentKind, parameters EquipmentParameters) Equipment {
 	return Equipment {
 		Kind:		kind,
 		Status:		Operational,	// Default status on creation

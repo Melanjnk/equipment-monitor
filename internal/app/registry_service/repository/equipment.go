@@ -1,171 +1,208 @@
 package repository
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
-	"time"
-	"github.com/gofrs/uuid"
+	"database/sql"
+	"errors"
 	"github.com/jmoiron/sqlx"
 	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/dtos"
-	"github.com/Melanjnk/equipment-monitor/internal/app/registry_service/model"
 )
 
 type Equipment struct {
 	db *sqlx.DB
+	insertOne *sqlx.NamedStmt
+	deleteOne *sqlx.NamedStmt
 }
 
-func NewEquipment(db *sqlx.DB) Equipment {
-	return Equipment{db: db}
-}
+const (
+	insertEquipment = `INSERT INTO equipment(kind,parameters) VALUES(:kind,:parameters) RETURNING id;`
+	deleteOneEquipment = `DELETE FROM equipment WHERE id=:id RETURNING id;`
+)
 
-func (repository *Equipment) List(equipmentFilter *dtos.EquipmentFilter) ([]*dtos.EquipmentGet, error) {
-	var equipmentModels []model.Equipment
-	query := `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment`
-	conditions := make([]string, 0, 6)
-
-	if equipmentFilter.Kinds != nil {
-		switch len(equipmentFilter.Kinds) {
-			case 0:
-				break
-			case 1:
-				conditions = append(conditions, "kind=" + string(figure(equipmentFilter.Kinds[0])))
-			default:
-				conditions = append(conditions, fmt.Sprintf("kind IN (%s)", joinIntegralArray(equipmentFilter.Kinds)))
-		}
-	} else if equipmentFilter.NoKinds != nil {
-		switch len(equipmentFilter.NoKinds) {
-			case 0:
-				break
-			case 1:
-				conditions = append(conditions, "kind<>" + string(figure(equipmentFilter.NoKinds[0])))
-			default:
-				conditions = append(conditions, fmt.Sprintf("kind NOT IN (%s)", joinIntegralArray(equipmentFilter.NoKinds)))
-		}
-	}
-
-	if equipmentFilter.Statuses != nil {
-		switch len(equipmentFilter.Statuses) {
-			case 0:
-				break
-			case 1:
-				conditions = append(conditions, "status=" + string(figure(equipmentFilter.Statuses[0])))
-			default:
-				conditions = append(conditions, fmt.Sprintf("status IN (%s)", joinIntegralArray(equipmentFilter.Statuses)))
-		}
-	} else if equipmentFilter.NoStatuses != nil {
-		switch len(equipmentFilter.NoStatuses) {
-			case 0:
-				break
-			case 1:
-				conditions = append(conditions, "status<>" + string(figure(equipmentFilter.NoStatuses[0])))
-			default:
-				conditions = append(conditions, fmt.Sprintf("status NOT IN (%s)", joinIntegralArray(equipmentFilter.NoStatuses)))
-		}
-	}
-
-	if equipmentFilter.CreatedSince != nil {
-		conditions = append(conditions, "created_at>=:created_since")
-	}
-	if equipmentFilter.CreatedUntil != nil {
-		conditions = append(conditions, "created_at<=:created_until")
-	}
-	if equipmentFilter.UpdatedSince != nil {
-		conditions = append(conditions, "updated_at>=:updated_since")
-	}
-	if equipmentFilter.UpdatedUntil != nil {
-		conditions = append(conditions, "updated_at<=:updated_until")
-	}
-	var err error
-	if len(conditions) == 0 {
-		err = repository.db.Select(&equipmentModels, query)
-	} else {
-		preparedQuery, _ := repository.db.PrepareNamed(query + " WHERE " + strings.Join(conditions, " AND "))
-		err = preparedQuery.Select(
-			&equipmentModels,
-			map[string]interface{}{
-				"created_since":	equipmentFilter.CreatedSince,
-				"created_until":	equipmentFilter.CreatedUntil,
-				"updated_since":	equipmentFilter.UpdatedSince,
-				"updated_until":	equipmentFilter.UpdatedUntil,
-			},
-		)
-	}
-	if err != nil {
-		return nil, err
-	}
-	equipmentGets := make([]*dtos.EquipmentGet, 0, len(equipmentModels))
-	for _, equipmentModel := range equipmentModels {
-		equipmentGets = append(equipmentGets, dtos.EquipmentGetFromModel(equipmentModel))
-	}
-	return equipmentGets, nil
-}
-
-func (repository *Equipment) Create(equipmentCreate *dtos.EquipmentCreate) (uuid.UUID, error) {
-	for jsonifiedParameters, _ := json.Marshal(equipmentCreate.Parameters); ; {
-		// Generate a UUID version 6 (using a library):
-		id, err := uuid.NewV6()
-		if err == nil {
-			_, err = repository.db.NamedExec(
-				`INSERT INTO equipment (id, kind, status, parameters) VALUES (:id, :kind, :status, :parameters)`,
-				map[string]interface{}{
-					"id":         id,
-					"kind":       equipmentCreate.Kind,
-					"status":     model.Operational,
-					"parameters": jsonifiedParameters,
-				},
-			)
-			if err == nil {
-				return id, nil
-			}
-			if false {// TODO: Check id collision error
-				continue
-			}
-		}
-		return uuid.UUID{}, err
-	}
-}
-
-func (repository *Equipment) Update(equipmentUpdate *dtos.EquipmentUpdate) (bool, error) {
-	var set string
-	var jsonifiedParameters []byte
-	if equipmentUpdate.Parameters == nil {
-		if equipmentUpdate.Status == nil {
-			return false, nil // Nothing to update
-		}
-		set = "status=:status"
-	} else {
-		if equipmentUpdate.Status == nil {
-			set = "parameters=:parameters"
+func NewEquipment(db *sqlx.DB) *Equipment {
+	MustPrepareNamed := func(query string) *sqlx.NamedStmt {
+		if statement, err := db.PrepareNamed(query); err != nil {
+			panic(err)
 		} else {
-			set = "status=:status, parameters=:parameters"
+			return statement
 		}
-		jsonifiedParameters, _ = json.Marshal(*equipmentUpdate.Parameters)
 	}
-	return checkAffect(repository.db.NamedExec(
-		fmt.Sprintf("UPDATE equipment SET %s, updated_at=:updated_at WHERE id=:id", set),
-		map[string]interface{}{
-			"id":			equipmentUpdate.Id,
-			"status": 		equipmentUpdate.Status,
-			"parameters":	jsonifiedParameters,
-			"updated_at":	time.Now(),
-		},
-	))
+
+	return &Equipment{
+		db,
+		MustPrepareNamed(insertEquipment),
+		MustPrepareNamed(deleteOneEquipment),
+	}
 }
 
-func (repository *Equipment) FindById(id uuid.UUID) (*dtos.EquipmentGet, error) {
-	var equipmentModel model.Equipment
-	err := repository.db.Get(&equipmentModel, `SELECT id, kind, status, parameters, created_at, updated_at FROM equipment WHERE id=$1`, id)
-	if err != nil {
-		return nil, err
-	}
-	var parameters map[string]interface{}
-	if err := json.Unmarshal(equipmentModel.Parameters, &parameters); err != nil {
-		return nil, err
-	}
-	return dtos.EquipmentGetFromModel(equipmentModel), nil
+func (repository *Equipment) Close() {
+	repository.insertOne.Close()
+	repository.deleteOne.Close()
 }
 
-func (repository *Equipment) RemoveById(id uuid.UUID) (bool, error) {
-	return checkAffect(repository.db.Exec(`DELETE FROM equipment WHERE id=$1`, id))
+func (repository *Equipment) CreateOne(equipmentCreate *dtos.EquipmentCreate) (string, error) {
+	var id string
+	err := repository.insertOne.Get(&id, equipmentCreate)
+	return id, err
+}
+
+func (repository *Equipment) CreateMany(equipmentCreate []dtos.EquipmentCreate) ([]string, error) {
+	return parseRows(repository.db.NamedQuery(insertEquipment, equipmentCreate))
+}
+
+func (repository *Equipment) UpdateById(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) (bool, error) {
+	query, args, err := updateSQL(equipmentUpdate, equipmentFilter)
+	if err == nil {
+		if len(query) > 0 {
+			var updateOne *sqlx.NamedStmt
+			if updateOne, err = repository.db.PrepareNamed(query); err == nil {
+				defer updateOne.Close()
+
+				var updatedId string
+				err = updateOne.Get(&updatedId, args)
+				if err == nil {
+					return true, nil
+				}
+				if !errors.Is(err, sql.ErrNoRows) {
+					return false, err
+				}
+			}
+		}
+	}
+	return false, err
+}
+
+func (repository *Equipment) UpdateByIds(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	if query, args, err := updateSQL(equipmentUpdate, equipmentFilter); err != nil {
+		return nil, err
+	} else if len(query) == 0 {
+		return nil, nil
+	} else {
+		preparedQuery, err := repository.db.Preparex(repository.db.Rebind(query))
+		if err != nil {
+			return nil, err
+		}
+		var ids []string
+		if argSlice, ok := args.([]any); ok {
+			err = preparedQuery.Select(&ids, argSlice...)
+		} else {
+			err = preparedQuery.Select(&ids, args)
+		}
+		return ids, err
+	}
+}
+
+func (repository *Equipment) UpdateByConditions(equipmentUpdate *dtos.EquipmentUpdate, equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	query, args, err := updateSQL(equipmentUpdate, equipmentFilter)
+	if err == nil {
+		var updateByConditions *sqlx.NamedStmt
+		if updateByConditions, err = repository.db.PrepareNamed(repository.db.Rebind(query)); err == nil {
+			defer updateByConditions.Close()
+
+			var ids []string
+			if err = updateByConditions.Select(&ids, args); err == nil {
+				if ids != nil {
+					return ids, nil
+				}
+				return make([]string, 0, 0), nil
+			}
+		}
+	}
+	return nil, err
+}
+
+func (repository *Equipment) DeleteById(equipmentFilter *dtos.EquipmentFilter) (bool, error) {
+	var deletedId string
+	err := repository.deleteOne.Get(&deletedId, map[string]any{`id`: equipmentFilter.Ids[0]})
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
+}
+
+func (repository *Equipment) DeleteByIds(equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	if query, args, err := sqlx.In(`DELETE FROM equipment WHERE id IN(?) RETURNING id;`, equipmentFilter.Ids); err != nil {
+		return nil, err
+	} else {
+		return parseRows(repository.db.Queryx(repository.db.Rebind(query), args...))
+	}
+}
+
+func (repository *Equipment) DeleteByConditions(equipmentFilter *dtos.EquipmentFilter) ([]string, error) {
+	query, args, err := deleteSQL(equipmentFilter)
+	if err == nil {
+		var deleteByConditions *sqlx.NamedStmt
+		deleteByConditions, err = repository.db.PrepareNamed(repository.db.Rebind(query))
+		if err == nil {
+			defer deleteByConditions.Close()
+
+			var ids []string
+			err = deleteByConditions.Select(&ids, args)
+			if err == nil {
+				if ids != nil {
+					return ids, nil
+				}
+				return make([]string, 0, 0), nil
+			}
+		}
+	}
+	return nil, err
+}
+
+func (repository *Equipment) FindById(equipmentFilter *dtos.EquipmentFilter) (*dtos.EquipmentGet, error) {
+	query, args, err := findSQL(equipmentFilter)
+	if err == nil {
+		var findById *sqlx.NamedStmt
+		findById, err = repository.db.PrepareNamed(query); 
+		if err == nil {
+			defer findById.Close()
+
+			var equipment dtos.EquipmentGet
+			err = findById.Get(&equipment, args)
+			if err == nil {
+				return &equipment, nil
+			}
+		}
+	}
+	return nil, err
+}
+
+func (repository *Equipment) FindByIds(equipmentFilter *dtos.EquipmentFilter) ([]dtos.EquipmentGet, error) {
+	query, args, err := sqlx.In(`SELECT id,kind,status,parameters,created_at,updated_at FROM equipment WHERE id IN(?)`, equipmentFilter.Ids)
+	if err == nil {
+		var equipments []dtos.EquipmentGet
+		if err = repository.db.Select(&equipments, repository.db.Rebind(query), args...); err == nil {
+			return equipments, nil
+		}
+	}
+	return nil, err
+}
+
+func (repository *Equipment) FindByConditions(equipmentFilter *dtos.EquipmentFilter) ([]dtos.EquipmentGet, error) {
+	query, args, err := findSQL(equipmentFilter)
+	if err == nil {
+		if query, args, err = sqlx.Named(query, args); err == nil {
+			var findByConditions *sqlx.Stmt
+			if findByConditions, err = repository.db.Preparex(repository.db.Rebind(query)); err == nil {
+				defer findByConditions.Close()
+
+				var equipments []dtos.EquipmentGet
+				if argSlice, ok := args.([]any); ok {
+					err = findByConditions.Select(&equipments, argSlice...)
+				} else {
+					err = findByConditions.Select(&equipments, args)
+				}
+				if err == nil {
+					if equipments != nil {
+						return equipments, nil
+					}
+					// Nothing is found; avoid returning nil
+					return make([]dtos.EquipmentGet, 0, 0), nil
+				}
+			}
+		}
+	}
+	return nil, err
 }
